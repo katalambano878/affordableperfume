@@ -26,40 +26,44 @@ export default function AdminLayout({
   const siteName = getSetting('site_name') || '';
 
   useEffect(() => {
-    async function checkAuth() {
-      const { data: { session } } = await supabase.auth.getSession();
+    if (pathname === '/admin/login') {
+      setIsLoading(false);
+      return;
+    }
 
-      if (pathname === '/admin/login') {
-        setIsLoading(false);
-        return;
-      }
+    let mounted = true;
+
+    async function handleSession(session: any) {
+      if (!mounted) return;
 
       if (!session) {
+        setIsLoading(false);
         router.push('/admin/login');
         return;
       }
 
-      // Ensure auth cookie is set (in case user already had a session from before)
-      document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
+      document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
-      // Check user role from profiles table
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', session.user.id)
         .single();
 
+      if (!mounted) return;
+
       if (profileError || !profile) {
         console.error('Failed to fetch user profile');
+        setIsLoading(false);
         router.push('/admin/login');
         return;
       }
 
-      // Only allow admin and staff roles
       if (profile.role !== 'admin' && profile.role !== 'staff') {
         console.warn('User does not have admin/staff role');
-        document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax; Secure';
+        document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
         await supabase.auth.signOut();
+        setIsLoading(false);
         router.push('/admin/login?error=unauthorized');
         return;
       }
@@ -70,20 +74,29 @@ export default function AdminLayout({
       setIsLoading(false);
     }
 
-    checkAuth();
-
-    // Keep cookie in sync when session refreshes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
+        handleSession(session);
+      }
       if (event === 'TOKEN_REFRESHED' && session) {
-        document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax; Secure`;
+        document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
       }
       if (event === 'SIGNED_OUT') {
-        document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax; Secure';
-        document.cookie = 'sb-refresh-token=; path=/; max-age=0; SameSite=Lax; Secure';
+        document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
+        document.cookie = 'sb-refresh-token=; path=/; max-age=0; SameSite=Lax';
+        setIsAuthenticated(false);
+        setUser(null);
+        setUserRole(null);
+        if (pathname !== '/admin/login') {
+          router.push('/admin/login');
+        }
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [pathname, router]);
 
   useEffect(() => {
@@ -135,12 +148,16 @@ export default function AdminLayout({
   }, []);
 
   const handleLogout = async () => {
-    // Clear auth cookies set during login
-    document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax; Secure';
-    document.cookie = 'sb-refresh-token=; path=/; max-age=0; SameSite=Lax; Secure';
+    document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
+    document.cookie = 'sb-refresh-token=; path=/; max-age=0; SameSite=Lax';
     await supabase.auth.signOut();
     router.push('/admin/login');
   };
+
+  // Render login page immediately without waiting for auth
+  if (pathname === '/admin/login') {
+    return <>{children}</>;
+  }
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Admin...</div>;
@@ -276,11 +293,6 @@ export default function AdminLayout({
     // @ts-ignore
     return enabledModules.includes(item.moduleId);
   });
-
-  // Special layout for Login Page
-  if (pathname === '/admin/login') {
-    return <>{children}</>;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
