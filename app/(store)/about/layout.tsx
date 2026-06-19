@@ -1,11 +1,12 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'About Us',
-  description: 'Learn about our story, values, and commitment to authentic fragrances. From Accra to your doorstep — affordable perfumes in Ghana.',
+  title: 'About Us | Affordable Perfumes GH',
+  description: 'We source authentic perfumes from trusted fragrance houses worldwide. Learn how Affordable Perfumes GH delivers premium scents at affordable prices across Ghana.',
+  keywords: ['affordable perfumes ghana', 'authentic fragrances accra', 'perfume store ghana', 'about affordable perfumes gh'],
   openGraph: {
-    title: 'About Us',
-    description: 'Learn about our story and commitment to authentic perfumes delivered across Ghana.',
+    title: 'About Us | Affordable Perfumes GH',
+    description: 'Learn our story — authentic perfumes from trusted fragrance houses delivered across Ghana at affordable prices.',
     type: 'website',
   },
 };

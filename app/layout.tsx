@@ -18,7 +18,7 @@ async function getSiteSettings() {
   let siteTagline = '';
   let siteDescription = "";
   let siteLogo = '';
-  let siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://example.com';
+  let siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com';
   let ogImage = '';
 
   try {
@@ -77,7 +77,13 @@ export async function generateMetadata(): Promise<Metadata> {
       "Original Perfumes Accra",
       "Fragrance Store Ghana",
       "Accra Perfume Delivery",
-      "Ghana E-commerce Perfumes"
+      "Ghana E-commerce Perfumes",
+      "Armaf Perfume Ghana",
+      "Areej Perfume Ghana",
+      "Cheap Perfumes Accra",
+      "Best Perfume Store Ghana",
+      "Men Perfumes Ghana",
+      "Women Fragrances Ghana"
     ],
     authors: [{ name: siteName }],
     creator: siteName,
@@ -116,7 +122,7 @@ export async function generateMetadata(): Promise<Metadata> {
       url: baseUrl,
       title: defaultTitle,
       description: desc,
-      siteName: siteName || 'Store',
+      siteName: siteName || 'Affordable Perfumes GH',
       images: [
         {
           url: ogImage,
@@ -181,21 +187,49 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
-              "@type": "Organization",
-              "name": siteName || "Store",
+              "@type": "Store",
+              "name": siteName || "Affordable Perfumes GH",
               "url": siteUrl,
               "logo": siteLogo ? (siteLogo.startsWith('http') ? siteLogo : `${siteUrl}${siteLogo}`) : `${siteUrl}/logo.svg`,
               "description": siteDescription || "Authentic perfumes and fragrances delivered across Ghana.",
+              "image": siteLogo ? (siteLogo.startsWith('http') ? siteLogo : `${siteUrl}${siteLogo}`) : `${siteUrl}/logo.svg`,
+              "priceRange": "GH₵50 - GH₵1500",
               "address": {
                 "@type": "PostalAddress",
                 "addressCountry": "GH",
-                "addressLocality": "Accra"
+                "addressLocality": "Accra",
+                "addressRegion": "Greater Accra"
+              },
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": "5.6037",
+                "longitude": "-0.1870"
+              },
+              "areaServed": {
+                "@type": "Country",
+                "name": "Ghana"
               },
               "contactPoint": {
                 "@type": "ContactPoint",
                 "contactType": "customer service",
                 "availableLanguage": "English",
                 "areaServed": "GH"
+              },
+              "sameAs": [],
+              "openingHoursSpecification": {
+                "@type": "OpeningHoursSpecification",
+                "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"],
+                "opens": "08:00",
+                "closes": "20:00"
+              },
+              "hasOfferCatalog": {
+                "@type": "OfferCatalog",
+                "name": "Perfumes & Fragrances",
+                "itemListElement": [
+                  { "@type": "OfferCatalog", "name": "Designer Perfumes" },
+                  { "@type": "OfferCatalog", "name": "Niche Fragrances" },
+                  { "@type": "OfferCatalog", "name": "Everyday Scents" }
+                ]
               }
             })
           }}
@@ -207,7 +241,7 @@ export default async function RootLayout({
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebSite",
-              "name": siteName || "Store",
+              "name": siteName || "Affordable Perfumes GH",
               "url": siteUrl,
               "potentialAction": {
                 "@type": "SearchAction",

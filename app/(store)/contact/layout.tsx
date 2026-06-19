@@ -1,11 +1,12 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Contact Us',
-  description: 'Get in touch with us. Customer support, orders, and inquiries. We\'re here to help with your shopping experience.',
+  title: 'Contact Us | Affordable Perfumes GH',
+  description: 'Get in touch with Affordable Perfumes GH. Order support, fragrance inquiries, and wholesale questions. Fast response guaranteed.',
+  keywords: ['contact affordable perfumes ghana', 'perfume store accra contact', 'buy perfume ghana help'],
   openGraph: {
-    title: 'Contact Us',
-    description: 'Get in touch with our team. We\'re here to help.',
+    title: 'Contact Us | Affordable Perfumes GH',
+    description: 'Reach out to our team for order support, fragrance inquiries, and more.',
     type: 'website',
   },
 };

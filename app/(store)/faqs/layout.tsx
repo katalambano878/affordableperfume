@@ -1,11 +1,12 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'FAQs',
-  description: 'Frequently asked questions about orders, shipping, returns, payments, and more. Find answers to common questions.',
+  title: 'FAQs | Affordable Perfumes GH',
+  description: 'Frequently asked questions about ordering perfumes online in Ghana. Shipping, returns, payment methods, authenticity guarantees, and more.',
+  keywords: ['perfume delivery ghana faq', 'buy perfume online ghana questions', 'affordable perfumes shipping'],
   openGraph: {
-    title: 'FAQs',
-    description: 'Find answers to frequently asked questions about our store.',
+    title: 'FAQs | Affordable Perfumes GH',
+    description: 'Find answers about ordering, shipping, returns, and authenticity for perfumes in Ghana.',
     type: 'website',
   },
 };
