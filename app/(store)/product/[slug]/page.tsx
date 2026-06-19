@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com';
+const SITE_URL = (!siteUrl || siteUrl === 'https://example.com') ? 'https://affordableperfumesgh.com' : siteUrl;
 
 async function getProduct(slug: string) {
   const supabase = createClient(supabaseUrl, supabaseKey);
@@ -27,7 +28,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const product = await getProduct(slug);
   if (!product) return { title: 'Product Not Found' };
 
-  const baseUrl = siteUrl.replace(/\/$/, '');
+  const baseUrl = SITE_URL.replace(/\/$/, '');
   const title = product.seo_title || product.name;
   const description = (product.seo_description || product.short_description || product.description || `Buy ${product.name} - Quality product from Ghana.`)
     .replace(/<[^>]*>/g, '')
@@ -77,7 +78,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const product = await getProduct(slug);
   if (!product) notFound();
 
-  const baseUrl = siteUrl.replace(/\/$/, '');
+  const baseUrl = SITE_URL.replace(/\/$/, '');
   const images = (product.product_images as { url: string; position?: number }[] | null) || [];
   const sortedImages = [...images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const firstImage = sortedImages[0]?.url;

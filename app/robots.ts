@@ -1,8 +1,8 @@
 import { MetadataRoute } from 'next';
 
-export default function robots(): MetadataRoute.Robots {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com').replace(/\/$/, '');
+const SITE_URL = 'https://affordableperfumesgh.com';
 
+export default function robots(): MetadataRoute.Robots {
   return {
     rules: [
       {
@@ -41,7 +41,7 @@ export default function robots(): MetadataRoute.Robots {
         ],
       },
     ],
-    sitemap: `${baseUrl}/sitemap.xml`,
-    host: baseUrl,
+    sitemap: `${SITE_URL}/sitemap.xml`,
+    host: SITE_URL,
   };
 }

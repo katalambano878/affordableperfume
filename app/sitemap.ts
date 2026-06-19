@@ -1,11 +1,12 @@
 import { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
+const SITE_URL = 'https://affordableperfumesgh.com';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com').replace(/\/$/, '');
+  const baseUrl = SITE_URL;
 
   const staticPages: MetadataRoute.Sitemap = [
     { url: baseUrl, lastModified: new Date('2026-01-01'), changeFrequency: 'daily', priority: 1 },
@@ -28,10 +29,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   try {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch active products (exclude wholesale-only)
     const { data: products } = await supabase
       .from('products')
-      .select('slug, updated_at, name')
+      .select('slug, updated_at')
       .eq('status', 'active')
       .or('is_wholesale.is.null,is_wholesale.eq.false');
 
@@ -44,7 +44,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }));
     }
 
-    // Category pages
     const { data: categories } = await supabase
       .from('categories')
       .select('slug, updated_at')
@@ -59,7 +58,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }));
     }
 
-    // Blog posts (try slug first, fall back to id)
     const { data: posts } = await supabase
       .from('blog_posts')
       .select('id, slug, updated_at')
