@@ -31,7 +31,7 @@ export function generateMetadata({
   author,
   noindex = false,
   siteName = 'Affordable Perfumes GH',
-  siteUrl = 'https://affordableperfumesgh.com'
+  siteUrl = 'https://www.affordableperfumesgh.com'
 }: SEOProps): Metadata {
   const fullTitle = title.includes(siteName) ? title : `${title} | ${siteName}`;
 

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 
-const SITE_URL = 'https://affordableperfumesgh.com';
+const SITE_URL = 'https://www.affordableperfumesgh.com';
 
 export const dynamic = 'force-static';
 

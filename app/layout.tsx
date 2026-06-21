@@ -18,8 +18,8 @@ async function getSiteSettings() {
   let siteTagline = '';
   let siteDescription = "";
   let siteLogo = '';
-  let siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com';
-  if (siteUrl === '' || siteUrl === 'https://example.com') siteUrl = 'https://affordableperfumesgh.com';
+  let siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.affordableperfumesgh.com';
+  if (siteUrl === '' || siteUrl === 'https://example.com') siteUrl = 'https://www.affordableperfumesgh.com';
   let ogImage = '';
 
   try {

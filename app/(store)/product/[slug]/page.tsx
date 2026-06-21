@@ -5,8 +5,8 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://affordableperfumesgh.com';
-const SITE_URL = (!siteUrl || siteUrl === 'https://example.com') ? 'https://affordableperfumesgh.com' : siteUrl;
+const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.affordableperfumesgh.com';
+const SITE_URL = (!siteUrl || siteUrl === 'https://example.com') ? 'https://www.affordableperfumesgh.com' : siteUrl;
 
 async function getProduct(slug: string) {
   const supabase = createClient(supabaseUrl, supabaseKey);
