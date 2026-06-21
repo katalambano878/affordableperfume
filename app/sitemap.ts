@@ -2,8 +2,12 @@ import { MetadataRoute } from 'next';
 import { createClient } from '@supabase/supabase-js';
 
 const SITE_URL = 'https://affordableperfumesgh.com';
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+function safeDate(value: any): Date {
+  if (!value) return new Date('2026-01-01');
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? new Date('2026-01-01') : d;
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = SITE_URL;
@@ -22,58 +26,91 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${baseUrl}/returns`, lastModified: new Date('2026-01-01'), changeFrequency: 'monthly', priority: 0.5 },
   ];
 
-  let productPages: MetadataRoute.Sitemap = [];
-  let categoryPages: MetadataRoute.Sitemap = [];
-  let blogPages: MetadataRoute.Sitemap = [];
+  let dynamicPages: MetadataRoute.Sitemap = [];
 
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return staticPages;
+  }
+
+  let supabase;
   try {
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    supabase = createClient(supabaseUrl, supabaseKey);
+  } catch {
+    return staticPages;
+  }
 
+  // Products
+  try {
     const { data: products } = await supabase
       .from('products')
       .select('slug, updated_at')
       .eq('status', 'active')
       .or('is_wholesale.is.null,is_wholesale.eq.false');
 
-    if (products) {
-      productPages = products.map((p) => ({
-        url: `${baseUrl}/product/${p.slug}`,
-        lastModified: new Date(p.updated_at),
-        changeFrequency: 'weekly' as const,
-        priority: 0.8,
-      }));
+    if (products && Array.isArray(products)) {
+      for (const p of products) {
+        if (p.slug) {
+          dynamicPages.push({
+            url: `${baseUrl}/product/${p.slug}`,
+            lastModified: safeDate(p.updated_at),
+            changeFrequency: 'weekly',
+            priority: 0.8,
+          });
+        }
+      }
     }
+  } catch (e) {
+    console.error('Sitemap: products query failed', e);
+  }
 
+  // Categories
+  try {
     const { data: categories } = await supabase
       .from('categories')
       .select('slug, updated_at')
       .eq('status', 'active');
 
-    if (categories) {
-      categoryPages = categories.map((c) => ({
-        url: `${baseUrl}/shop?category=${c.slug}`,
-        lastModified: new Date(c.updated_at),
-        changeFrequency: 'weekly' as const,
-        priority: 0.7,
-      }));
+    if (categories && Array.isArray(categories)) {
+      for (const c of categories) {
+        if (c.slug) {
+          dynamicPages.push({
+            url: `${baseUrl}/shop?category=${c.slug}`,
+            lastModified: safeDate(c.updated_at),
+            changeFrequency: 'weekly',
+            priority: 0.7,
+          });
+        }
+      }
     }
-
-    const { data: posts } = await supabase
-      .from('blog_posts')
-      .select('id, slug, updated_at')
-      .eq('status', 'published');
-
-    if (posts) {
-      blogPages = posts.map((p) => ({
-        url: `${baseUrl}/blog/${p.slug || p.id}`,
-        lastModified: new Date(p.updated_at),
-        changeFrequency: 'monthly' as const,
-        priority: 0.6,
-      }));
-    }
-  } catch (error) {
-    console.error('Error generating sitemap:', error);
+  } catch (e) {
+    console.error('Sitemap: categories query failed', e);
   }
 
-  return [...staticPages, ...productPages, ...categoryPages, ...blogPages];
+  // Blog posts
+  try {
+    const { data: posts } = await supabase
+      .from('blog_posts')
+      .select('id, updated_at')
+      .eq('status', 'published');
+
+    if (posts && Array.isArray(posts)) {
+      for (const p of posts) {
+        if (p.id) {
+          dynamicPages.push({
+            url: `${baseUrl}/blog/${p.id}`,
+            lastModified: safeDate(p.updated_at),
+            changeFrequency: 'monthly',
+            priority: 0.6,
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Sitemap: blog query failed', e);
+  }
+
+  return [...staticPages, ...dynamicPages];
 }
