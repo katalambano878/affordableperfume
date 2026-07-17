@@ -799,13 +799,12 @@ async function callRpc(
 }
 
 function createAuthApi() {
-  // Lazy-require so this module can still be analyzed without pulling auth into
-  // every import path at typecheck time. Runtime always has lib/db/auth.ts.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const auth = require("./auth") as typeof import("./auth");
+  // Lazy import so auth stays out of cold paths that only need .from()
+  const loadAuth = () => import("./auth");
 
   return {
     async signInWithPassword({ email, password }: { email: string; password: string }) {
+      const auth = await loadAuth();
       const { session, error } = await auth.signInWithPassword(email, password);
       if (error || !session) {
         return { data: { user: null, session: null }, error: { message: error || "Login failed" } };
@@ -834,6 +833,7 @@ function createAuthApi() {
       password: string;
       options?: { data?: Record<string, unknown> };
     }) {
+      const auth = await loadAuth();
       const { session, user, error } = await auth.signUpWithPassword({
         email,
         password,
@@ -863,6 +863,7 @@ function createAuthApi() {
       if (!jwt) {
         return { data: { user: null }, error: { message: "No JWT provided" } };
       }
+      const auth = await loadAuth();
       const verified = await auth.verifyAccessToken(jwt);
       if (!verified) {
         return { data: { user: null }, error: { message: "Invalid JWT" } };
@@ -879,7 +880,7 @@ function createAuthApi() {
     async signOut() {
       return { error: null };
     },
-    async updateUser(attrs: { password?: string; data?: Record<string, unknown> }) {
+    async updateUser(_attrs: { password?: string; data?: Record<string, unknown> }) {
       return {
         data: { user: null },
         error: { message: "updateUser requires HTTP auth context; use /auth/v1/user" },

@@ -1,5 +1,6 @@
 import { createClient as createSupabaseJsClient } from '@supabase/supabase-js';
 import { isPlainPostgres } from './db/mode';
+import { createClient as createPgClient } from './db/supabase-compat';
 
 /**
  * Server-side admin client.
@@ -11,9 +12,7 @@ import { isPlainPostgres } from './db/mode';
 
 function createAdminClient() {
   if (isPlainPostgres()) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { createClient } = require('./db/supabase-compat') as typeof import('./db/supabase-compat');
-    return createClient();
+    return createPgClient();
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
