@@ -30,3 +30,8 @@ yarn-error.log*
 
 # Vercel
 .vercel
+
+# Migration dumps (contain secrets)
+migration-artifacts/
+.env.staging
+.env.staging.local
