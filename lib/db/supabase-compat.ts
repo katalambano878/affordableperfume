@@ -61,12 +61,28 @@ interface EmbedSpec {
 }
 
 const PG_IDENT = /^[a-z_][a-z0-9_]*$/i;
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function ident(name: string): string {
   if (!PG_IDENT.test(name)) {
     throw new Error(`Unsafe SQL identifier: ${name}`);
   }
   return `"${name}"`;
+}
+
+/** Cast uuid-like columns to text when the filter value is not a UUID. */
+function uuidSafeLeft(col: string, value: any): string {
+  const looksUuidCol = col === "id" || col.endsWith("_id");
+  if (
+    looksUuidCol &&
+    typeof value === "string" &&
+    value.length > 0 &&
+    !UUID_RE.test(value)
+  ) {
+    return `${ident(col)}::text`;
+  }
+  return ident(col);
 }
 
 // ---- select-string parser (handles nested embeds with parentheses) ---------
@@ -404,7 +420,10 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     const o = sqlOp[bare];
     if (!o) throw new Error(`Unsupported operator: ${op}`);
     params.push(value);
-    const clause = `${ident(col)} ${o} $${params.length}`;
+    // Avoid Postgres uuid cast errors for filters like id.eq.ORD-123
+    // (PostgREST coerces; we compare as text when the value is not a UUID).
+    const left = uuidSafeLeft(col, value);
+    const clause = `${left} ${o} $${params.length}`;
     return negate ? `NOT (${clause})` : clause;
   }
 
@@ -458,7 +477,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     const o = sqlOp[op];
     if (!o) throw new Error(`Unsupported or() operator: ${op}`);
     params.push(val);
-    return `${ident(col)} ${o} $${params.length}`;
+    return `${uuidSafeLeft(col, val)} ${o} $${params.length}`;
   }
 
   private buildOrderLimit(): string {

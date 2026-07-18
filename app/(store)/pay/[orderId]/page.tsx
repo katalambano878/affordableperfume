@@ -25,13 +25,12 @@ export default function PaymentPage() {
     async function fetchOrder() {
       try {
         // Fetch order by ID (UUID) or order_number
-        let query = supabase
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
+        const { data, error: fetchError } = await supabase
           .from('orders')
           .select('*')
-          .or(`id.eq.${orderId},order_number.eq.${orderId}`)
+          .eq(isUuid ? 'id' : 'order_number', orderId)
           .single();
-
-        const { data, error: fetchError } = await query;
 
         if (fetchError || !data) {
           setError('Order not found. Please check your link and try again.');
