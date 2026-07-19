@@ -349,6 +349,45 @@ the new stack has survived real traffic.
 8. **SSH tunnel to the DB**: tunnel to the Postgres *container* (`fleet-postgres:5432`
    via docker network), not the VPS's localhost — the port isn't published on the host.
 
+9. **`.upsert()` from the browser needs REST-route support.** supabase-js sends a
+   plain POST with `Prefer: resolution=merge-duplicates` and `?on_conflict=<col>`.
+   If your `/rest/v1/[table]` POST handler only does INSERT, every settings-save /
+   toggle that uses upsert fails with a duplicate-key error. Detect the Prefer
+   header and route to upsert.
+
+10. **Nested embeds must resolve FKs against the *parent embed's* table, not the
+    top-level table.** `orders → order_items → products(product_images(url))`
+    silently broke ("column order_id does not exist") because the recursion kept
+    using the top-level table for FK lookups. Also auto-include the join FK column
+    (e.g. `order_items.product_id`) in the embed's SELECT even when the code didn't
+    request it — otherwise nested objects come back `null`.
+
+11. **PostgREST aggregate embeds**: `product_variants(count)` is an aggregate, not a
+    column. Emulate with `SELECT fk, count(*) ... GROUP BY fk` returning
+    `[{ count: n }]` per parent.
+
+12. **Browser file uploads are multipart.** storage-js wraps `File`/`Blob` bodies in
+    `FormData` (empty field name + `cacheControl` field); server-side callers send
+    raw bytes. A storage route that only reads `req.arrayBuffer()` stores the
+    multipart envelope → corrupted images. Branch on the `content-type` header.
+    Also: `.remove([paths])` sends `DELETE /storage/v1/object/{bucket}` with a JSON
+    `{ prefixes: [...] }` body — a separate route from per-object DELETE.
+
+13. **FK map completeness = embed correctness.** Every `alias:fk_column(...)` embed
+    (e.g. `profiles:user_id(...)`) resolves through the FK map; missing edges either
+    error or guess the wrong table. After restore, regenerate the map from
+    `information_schema` FKs — and if the restore didn't carry FK constraints over,
+    derive edges from column naming (`*_id`) + the original Supabase schema.
+
+14. **Tables that were empty at dump time can be missing entirely** after restore
+    (empty JSON dump → no CREATE TABLE). Diff `information_schema.tables` against
+    the dump inventory and create the stragglers manually.
+
+15. **Replay every page's exact query shapes against the real DB before calling it
+    done.** A ~40-check script that mirrors each admin/store page's selects,
+    filters, embeds, upserts and writes (self-cleaning) catches all of the above in
+    seconds — see `migration-artifacts/diag_admin.ts`.
+
 ---
 
 ## 7. Verification Checklist (run all of it, staging AND production)
