@@ -1,120 +1,79 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export default function AdminBlogPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedPosts, setSelectedPosts] = useState<number[]>([]);
+  const [selectedPosts, setSelectedPosts] = useState<string[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const posts = [
-    {
-      id: 1,
-      title: '10 Essential Tips for Creating a Minimalist Home',
-      slug: '10-essential-tips-minimalist-home',
-      author: 'Sarah Johnson',
-      category: 'Interior Design',
-      image: 'https://readdy.ai/api/search-image?query=modern%20minimalist%20living%20room%20interior%20design%20with%20clean%20lines%20natural%20light%20and%20simple%20elegant%20furniture%20in%20neutral%20tones&width=600&height=400&seq=blogadm1&orientation=landscape',
-      excerpt: 'Discover how to transform your living space into a serene minimalist haven with these practical tips...',
-      status: 'Published',
-      views: 2456,
-      comments: 23,
-      publishDate: 'Dec 15, 2024',
-      featured: true
-    },
-    {
-      id: 2,
-      title: 'The Art of Choosing Perfect Home Textiles',
-      slug: 'art-of-choosing-perfect-home-textiles',
-      author: 'Michael Chen',
-      category: 'Home Styling',
-      image: 'https://readdy.ai/api/search-image?query=luxurious%20home%20textiles%20collection%20with%20cotton%20linens%20throws%20and%20pillows%20in%20natural%20cream%20and%20beige%20tones%20on%20elegant%20display&width=600&height=400&seq=blogadm2&orientation=landscape',
-      excerpt: 'Learn the secrets to selecting textiles that elevate your home aesthetic and comfort...',
-      status: 'Published',
-      views: 1892,
-      comments: 18,
-      publishDate: 'Dec 10, 2024',
-      featured: true
-    },
-    {
-      id: 3,
-      title: 'Sustainable Living: Eco-Friendly Home Products Guide',
-      slug: 'sustainable-living-eco-friendly-guide',
-      author: 'Emma Williams',
-      category: 'Sustainability',
-      image: 'https://readdy.ai/api/search-image?query=eco-friendly%20sustainable%20home%20products%20including%20natural%20materials%20bamboo%20organic%20cotton%20and%20reusable%20items%20arranged%20aesthetically&width=600&height=400&seq=blogadm3&orientation=landscape',
-      excerpt: 'Make conscious choices for your home with our comprehensive guide to sustainable products...',
-      status: 'Published',
-      views: 3124,
-      comments: 31,
-      publishDate: 'Dec 5, 2024',
-      featured: true
-    },
-    {
-      id: 4,
-      title: 'Lighting Design: Creating Ambiance in Every Room',
-      slug: 'lighting-design-creating-ambiance',
-      author: 'David Martinez',
-      category: 'Interior Design',
-      image: 'https://readdy.ai/api/search-image?query=elegant%20contemporary%20home%20lighting%20design%20with%20brass%20fixtures%20pendant%20lights%20and%20table%20lamps%20creating%20warm%20ambient%20atmosphere&width=600&height=400&seq=blogadm4&orientation=landscape',
-      excerpt: 'Master the art of lighting to transform the mood and functionality of your spaces...',
-      status: 'Draft',
-      views: 0,
-      comments: 0,
-      publishDate: 'Dec 25, 2024',
-      featured: false
-    },
-    {
-      id: 5,
-      title: 'Gift Guide: Thoughtful Home Accessories',
-      slug: 'gift-guide-thoughtful-home-accessories',
-      author: 'Sarah Johnson',
-      category: 'Gift Ideas',
-      image: 'https://readdy.ai/api/search-image?query=curated%20collection%20of%20elegant%20home%20accessories%20and%20decor%20items%20beautifully%20arranged%20as%20gift%20ideas%20on%20clean%20white%20background&width=600&height=400&seq=blogadm5&orientation=landscape',
-      excerpt: 'Find the perfect gifts for home lovers with our carefully curated selection...',
-      status: 'Scheduled',
-      views: 0,
-      comments: 0,
-      publishDate: 'Dec 22, 2024',
-      featured: false
-    },
-    {
-      id: 6,
-      title: 'Color Psychology: Choosing the Right Palette',
-      slug: 'color-psychology-choosing-palette',
-      author: 'Michael Chen',
-      category: 'Home Styling',
-      image: 'https://readdy.ai/api/search-image?query=color%20palette%20swatches%20and%20paint%20samples%20in%20harmonious%20neutral%20and%20earth%20tones%20for%20interior%20design%20inspiration&width=600&height=400&seq=blogadm6&orientation=landscape',
-      excerpt: 'Understand how colors affect mood and create the perfect atmosphere in your home...',
-      status: 'Published',
-      views: 1567,
-      comments: 14,
-      publishDate: 'Nov 28, 2024',
-      featured: false
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('blog_posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      setPosts(
+        (data || []).map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          author: p.author_id ? 'Staff' : 'Admin',
+          category: Array.isArray(p.tags) && p.tags[0] ? p.tags[0] : 'General',
+          image: p.featured_image || '/placeholder-blog.jpg',
+          excerpt: p.excerpt || '',
+          status: p.status === 'published' ? 'Published' : p.status === 'draft' ? 'Draft' : p.status || 'Draft',
+          views: 0,
+          comments: 0,
+          publishDate: p.published_at
+            ? new Date(p.published_at).toLocaleDateString()
+            : new Date(p.created_at).toLocaleDateString(),
+          featured: p.status === 'published',
+        }))
+      );
+    } catch (err) {
+      console.error('Error fetching blog posts:', err);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const statusColors: any = {
-    'Published': 'bg-blue-100 text-blue-700',
-    'Draft': 'bg-gray-100 text-gray-700',
-    'Scheduled': 'bg-blue-100 text-blue-700'
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this post?')) return;
+    const { error } = await supabase.from('blog_posts').delete().eq('id', id);
+    if (error) alert(error.message);
+    else fetchPosts();
+  };
+
+  const statusColors: Record<string, string> = {
+    Published: 'bg-blue-100 text-blue-700',
+    Draft: 'bg-gray-100 text-gray-700',
+    Scheduled: 'bg-blue-100 text-blue-700',
   };
 
   const handleSelectAll = () => {
-    if (selectedPosts.length === posts.length) {
-      setSelectedPosts([]);
-    } else {
-      setSelectedPosts(posts.map(p => p.id));
-    }
+    if (selectedPosts.length === posts.length) setSelectedPosts([]);
+    else setSelectedPosts(posts.map((p) => p.id));
   };
 
-  const handleSelectPost = (postId: number) => {
-    if (selectedPosts.includes(postId)) {
-      setSelectedPosts(selectedPosts.filter(id => id !== postId));
-    } else {
-      setSelectedPosts([...selectedPosts, postId]);
-    }
+  const handleSelectPost = (postId: string) => {
+    setSelectedPosts((prev) =>
+      prev.includes(postId) ? prev.filter((id) => id !== postId) : [...prev, postId]
+    );
   };
+
+  const publishedCount = posts.filter((p) => p.status === 'Published').length;
 
   return (
     <div className="space-y-6">
@@ -123,10 +82,14 @@ export default function AdminBlogPage() {
           <h1 className="text-3xl font-bold text-gray-900">Blog Posts</h1>
           <p className="text-gray-600 mt-1">Create and manage your blog content</p>
         </div>
-        <Link href="/admin/blog/new" className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => alert('Blog editor coming soon — contact support to add posts via database for now.')}
+          className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap"
+        >
           <i className="ri-add-line mr-2"></i>
           New Post
-        </Link>
+        </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -136,130 +99,66 @@ export default function AdminBlogPage() {
         </div>
         <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Published</p>
-          <p className="text-2xl font-bold text-blue-700">{posts.filter(p => p.status === 'Published').length}</p>
+          <p className="text-2xl font-bold text-blue-700">{publishedCount}</p>
         </div>
         <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
-          <p className="text-sm text-gray-600 mb-1">Total Views</p>
-          <p className="text-2xl font-bold text-gray-900">{posts.reduce((sum, p) => sum + p.views, 0).toLocaleString()}</p>
+          <p className="text-sm text-gray-600 mb-1">Drafts</p>
+          <p className="text-2xl font-bold text-gray-900">{posts.length - publishedCount}</p>
         </div>
         <div className="bg-white rounded-xl border-2 border-gray-200 p-4">
           <p className="text-sm text-gray-600 mb-1">Comments</p>
-          <p className="text-2xl font-bold text-blue-700">{posts.reduce((sum, p) => sum + p.comments, 0)}</p>
+          <p className="text-2xl font-bold text-blue-700">0</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <select className="px-4 py-2 pr-8 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium cursor-pointer">
-                <option>All Status</option>
-                <option>Published</option>
-                <option>Draft</option>
-                <option>Scheduled</option>
-              </select>
-              <select className="px-4 py-2 pr-8 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium cursor-pointer">
-                <option>All Categories</option>
-                <option>Interior Design</option>
-                <option>Home Styling</option>
-                <option>Sustainability</option>
-                <option>Gift Ideas</option>
-              </select>
-              <select className="px-4 py-2 pr-8 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium cursor-pointer">
-                <option>Sort by Date</option>
-                <option>Sort by Views</option>
-                <option>Sort by Comments</option>
-              </select>
+        {loading ? (
+          <div className="p-12 text-center text-gray-500">Loading posts…</div>
+        ) : posts.length === 0 ? (
+          <div className="p-16 text-center">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <i className="ri-article-line text-3xl text-gray-400"></i>
             </div>
-            <div className="flex border-2 border-gray-300 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setViewMode('grid')}
-                className={`w-10 h-10 flex items-center justify-center transition-colors ${
-                  viewMode === 'grid' ? 'bg-blue-700 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <i className="ri-grid-line text-xl"></i>
-              </button>
-              <button
-                onClick={() => setViewMode('list')}
-                className={`w-10 h-10 flex items-center justify-center border-l-2 border-gray-300 transition-colors ${
-                  viewMode === 'list' ? 'bg-blue-700 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                <i className="ri-list-check text-xl"></i>
-              </button>
-            </div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No blog posts yet</h3>
+            <p className="text-gray-500 mb-6">Start sharing perfume tips, new arrivals, and brand stories.</p>
+            <button
+              type="button"
+              onClick={() => alert('Blog editor coming soon.')}
+              className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold"
+            >
+              Create First Post
+            </button>
           </div>
-        </div>
-
-        {selectedPosts.length > 0 && (
-          <div className="p-4 bg-blue-50 border-b border-blue-200 flex items-center justify-between">
-            <p className="text-blue-800 font-semibold">
-              {selectedPosts.length} post{selectedPosts.length > 1 ? 's' : ''} selected
-            </p>
-            <div className="flex items-center space-x-2">
-              <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
-                Publish
-              </button>
-              <button className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
-                Draft
-              </button>
-              <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors whitespace-nowrap">
-                Delete
-              </button>
-            </div>
-          </div>
-        )}
-
-        {viewMode === 'grid' ? (
+        ) : viewMode === 'grid' ? (
           <div className="p-6 grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {posts.map((post) => (
               <div key={post.id} className="border-2 border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    checked={selectedPosts.includes(post.id)}
-                    onChange={() => handleSelectPost(post.id)}
-                    className="absolute top-3 left-3 w-5 h-5 text-blue-700 border-gray-300 rounded focus:ring-blue-500 cursor-pointer z-10"
-                  />
-                  <div className="aspect-video bg-gray-100 overflow-hidden">
+                <div className="aspect-video bg-gray-100 overflow-hidden">
+                  {post.image && post.image !== '/placeholder-blog.jpg' ? (
                     <img src={post.image} alt={post.title} className="w-full h-full object-cover" />
-                  </div>
-                  {post.featured && (
-                    <span className="absolute top-3 right-3 bg-amber-500 text-white px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap">
-                      Featured
-                    </span>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                      <i className="ri-image-line text-4xl"></i>
+                    </div>
                   )}
                 </div>
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">
                     <span className="text-xs font-semibold text-blue-700">{post.category}</span>
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColors[post.status]}`}>
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${statusColors[post.status] || 'bg-gray-100'}`}>
                       {post.status}
                     </span>
                   </div>
                   <h3 className="font-bold text-gray-900 mb-2 line-clamp-2">{post.title}</h3>
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{post.excerpt}</p>
-                  <div className="flex items-center justify-between text-sm text-gray-600 mb-4 pb-4 border-b border-gray-200">
-                    <span className="flex items-center">
-                      <i className="ri-eye-line mr-1"></i>
-                      {post.views}
-                    </span>
-                    <span className="flex items-center">
-                      <i className="ri-chat-3-line mr-1"></i>
-                      {post.comments}
-                    </span>
-                    <span className="whitespace-nowrap">{post.publishDate}</span>
-                  </div>
+                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">{post.excerpt || 'No excerpt'}</p>
+                  <p className="text-sm text-gray-500 mb-4">{post.publishDate}</p>
                   <div className="flex items-center space-x-2">
-                    <Link
-                      href={`/admin/blog/${post.id}`}
-                      className="flex-1 bg-blue-700 hover:bg-blue-800 text-white py-2 rounded-lg text-sm font-medium text-center transition-colors whitespace-nowrap"
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(post.id)}
+                      className="flex-1 border-2 border-red-200 text-red-600 py-2 rounded-lg text-sm font-medium hover:bg-red-50"
                     >
-                      Edit Post
-                    </Link>
-                    <button className="w-9 h-9 flex items-center justify-center border-2 border-gray-300 text-gray-700 hover:border-blue-600 hover:text-blue-600 rounded-lg transition-colors">
-                      <i className="ri-eye-line"></i>
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -272,70 +171,29 @@ export default function AdminBlogPage() {
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="py-4 px-6">
-                    <input
-                      type="checkbox"
-                      checked={selectedPosts.length === posts.length}
-                      onChange={handleSelectAll}
-                      className="w-4 h-4 text-blue-700 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                    />
+                    <input type="checkbox" checked={selectedPosts.length === posts.length && posts.length > 0} onChange={handleSelectAll} className="w-4 h-4 rounded" />
                   </th>
                   <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Post</th>
-                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Author</th>
-                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Category</th>
-                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Views</th>
-                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Comments</th>
                   <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Status</th>
+                  <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Date</th>
                   <th className="text-left py-4 px-4 text-sm font-semibold text-gray-700">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {posts.map((post) => (
-                  <tr key={post.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                  <tr key={post.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-4 px-6">
-                      <input
-                        type="checkbox"
-                        checked={selectedPosts.includes(post.id)}
-                        onChange={() => handleSelectPost(post.id)}
-                        className="w-4 h-4 text-blue-700 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                      />
+                      <input type="checkbox" checked={selectedPosts.includes(post.id)} onChange={() => handleSelectPost(post.id)} className="w-4 h-4 rounded" />
                     </td>
+                    <td className="py-4 px-4 font-semibold text-gray-900">{post.title}</td>
                     <td className="py-4 px-4">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-20 h-14 bg-gray-100 rounded-lg overflow-hidden">
-                          <img src={post.image} alt={post.title} className="w-full h-full object-cover" />
-                        </div>
-                        <div>
-                          <Link href={`/admin/blog/${post.id}`} className="font-semibold text-gray-900 hover:text-blue-700">
-                            {post.title}
-                          </Link>
-                          <p className="text-sm text-gray-500 mt-1">{post.publishDate}</p>
-                        </div>
-                      </div>
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColors[post.status] || 'bg-gray-100'}`}>{post.status}</span>
                     </td>
-                    <td className="py-4 px-4 text-gray-700">{post.author}</td>
-                    <td className="py-4 px-4 text-gray-700">{post.category}</td>
-                    <td className="py-4 px-4 font-semibold text-gray-900">{post.views}</td>
-                    <td className="py-4 px-4 font-semibold text-gray-900">{post.comments}</td>
+                    <td className="py-4 px-4 text-gray-700">{post.publishDate}</td>
                     <td className="py-4 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors[post.status]}`}>
-                        {post.status}
-                      </span>
-                    </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center space-x-2">
-                        <Link
-                          href={`/admin/blog/${post.id}`}
-                          className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                        >
-                          <i className="ri-edit-line text-lg"></i>
-                        </Link>
-                        <button className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
-                          <i className="ri-eye-line text-lg"></i>
-                        </button>
-                        <button className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors">
-                          <i className="ri-delete-bin-line text-lg"></i>
-                        </button>
-                      </div>
+                      <button type="button" onClick={() => handleDelete(post.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">
+                        Delete
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -344,18 +202,19 @@ export default function AdminBlogPage() {
           </div>
         )}
 
-        <div className="p-6 border-t border-gray-200 flex items-center justify-between">
-          <p className="text-gray-600">Showing {posts.length} posts</p>
-          <div className="flex items-center space-x-2">
-            <button className="w-10 h-10 flex items-center justify-center border-2 border-gray-300 rounded-lg hover:border-gray-400 transition-colors">
-              <i className="ri-arrow-left-s-line text-xl text-gray-600"></i>
-            </button>
-            <button className="w-10 h-10 flex items-center justify-center bg-blue-700 text-white rounded-lg font-semibold">1</button>
-            <button className="w-10 h-10 flex items-center justify-center border-2 border-gray-300 rounded-lg hover:border-gray-400 transition-colors">
-              <i className="ri-arrow-right-s-line text-xl text-gray-600"></i>
-            </button>
+        {posts.length > 0 && (
+          <div className="p-6 border-t border-gray-200 flex items-center justify-between">
+            <p className="text-gray-600">Showing {posts.length} post{posts.length !== 1 ? 's' : ''}</p>
+            <div className="flex border-2 border-gray-300 rounded-lg overflow-hidden">
+              <button type="button" onClick={() => setViewMode('grid')} className={`w-10 h-10 flex items-center justify-center ${viewMode === 'grid' ? 'bg-blue-700 text-white' : 'bg-white text-gray-700'}`}>
+                <i className="ri-grid-line"></i>
+              </button>
+              <button type="button" onClick={() => setViewMode('list')} className={`w-10 h-10 flex items-center justify-center border-l-2 border-gray-300 ${viewMode === 'list' ? 'bg-blue-700 text-white' : 'bg-white text-gray-700'}`}>
+                <i className="ri-list-check"></i>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

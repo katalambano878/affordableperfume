@@ -15,19 +15,41 @@ export default function WishlistPage() {
   const addAllToCart = () => {
     const inStockItems = wishlistItems.filter(item => item.inStock);
     inStockItems.forEach(item => {
-      // Convert WishlistItem to CartItem if necessary, or assume compatibility
       addToCart({
         id: item.id,
         name: item.name,
         price: item.price,
         image: item.image,
         quantity: 1,
-        slug: item.slug || item.id, // Fallback
-        maxStock: 99 // Default
+        slug: item.slug || item.id,
+        maxStock: 99
       });
     });
     if (inStockItems.length > 0) {
       alert(`Added ${inStockItems.length} items to cart`);
+    }
+  };
+
+  const shareUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/wishlist`
+    : 'https://www.affordableperfumesgh.com/wishlist';
+  const shareText = wishlistItems.length
+    ? `Check out my wishlist at Affordable Perfumes GH — ${wishlistItems.length} item${wishlistItems.length === 1 ? '' : 's'} saved!`
+    : 'Check out Affordable Perfumes GH!';
+
+  const shareWishlist = (platform: 'facebook' | 'twitter' | 'whatsapp' | 'email') => {
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedText = encodeURIComponent(shareText);
+    const urls: Record<string, string> = {
+      facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      twitter: `https://twitter.com/intent/tweet?text=${encodedText}&url=${encodedUrl}`,
+      whatsapp: `https://wa.me/?text=${encodedText}%20${encodedUrl}`,
+      email: `mailto:?subject=${encodeURIComponent('My Affordable Perfumes GH Wishlist')}&body=${encodedText}%0A%0A${encodedUrl}`,
+    };
+    if (platform === 'email') {
+      window.location.href = urls.email;
+    } else {
+      window.open(urls[platform], '_blank', 'noopener,noreferrer,width=600,height=500');
     }
   };
 
@@ -99,16 +121,36 @@ export default function WishlistPage() {
             <h2 className="text-3xl font-bold mb-4">Share Your Wishlist</h2>
             <p className="text-blue-100 mb-8 text-lg">Let friends and family know what you love</p>
             <div className="flex justify-center space-x-4">
-              <button className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+              <button
+                type="button"
+                onClick={() => shareWishlist('facebook')}
+                className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                aria-label="Share on Facebook"
+              >
                 <i className="ri-facebook-fill text-xl"></i>
               </button>
-              <button className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+              <button
+                type="button"
+                onClick={() => shareWishlist('twitter')}
+                className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                aria-label="Share on X"
+              >
                 <i className="ri-twitter-x-fill text-xl"></i>
               </button>
-              <button className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+              <button
+                type="button"
+                onClick={() => shareWishlist('whatsapp')}
+                className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                aria-label="Share on WhatsApp"
+              >
                 <i className="ri-whatsapp-fill text-xl"></i>
               </button>
-              <button className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+              <button
+                type="button"
+                onClick={() => shareWishlist('email')}
+                className="w-12 h-12 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-lg transition-colors"
+                aria-label="Share by email"
+              >
                 <i className="ri-mail-fill text-xl"></i>
               </button>
             </div>
