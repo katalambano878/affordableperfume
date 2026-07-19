@@ -201,6 +201,7 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
     const [seoTitle, setSeoTitle] = useState(initialData?.seo_title || '');
     const [metaDescription, setMetaDescription] = useState(initialData?.seo_description || '');
     const [urlSlug, setUrlSlug] = useState(initialData?.slug || '');
+    const [slugEdited, setSlugEdited] = useState(false);
     const [keywords, setKeywords] = useState(initialData?.tags?.join(', ') || '');
 
     const tabs = [
@@ -225,12 +226,13 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
         fetchCategories();
     }, [categoryId]);
 
-    // Auto-generate slug from name if not manually edited
+    // Auto-generate slug from the full name as it's typed,
+    // until the user manually edits the slug field.
     useEffect(() => {
-        if (!isEditMode && productName && !urlSlug) {
+        if (!isEditMode && !slugEdited) {
             setUrlSlug(productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''));
         }
-    }, [productName, isEditMode, urlSlug]);
+    }, [productName, isEditMode, slugEdited]);
 
     // Auto-generate SKU for new products
     useEffect(() => {
@@ -322,11 +324,22 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
                 error = updateError;
             } else {
                 // Create new
-                const { data: newProduct, error: insertError } = await supabase
+                let { data: newProduct, error: insertError } = await supabase
                     .from('products')
                     .insert([productData])
                     .select()
                     .single();
+
+                // Slug collision: retry once with a unique suffix
+                if (insertError?.message?.includes('products_slug_key')) {
+                    const retry = await supabase
+                        .from('products')
+                        .insert([{ ...productData, slug: `${productData.slug}-${Date.now().toString(36)}` }])
+                        .select()
+                        .single();
+                    newProduct = retry.data;
+                    insertError = retry.error;
+                }
 
                 if (newProduct) productId = newProduct.id;
                 error = insertError;
@@ -1166,7 +1179,7 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
                                     <input
                                         type="text"
                                         value={urlSlug}
-                                        onChange={(e) => setUrlSlug(e.target.value)}
+                                        onChange={(e) => { setSlugEdited(true); setUrlSlug(e.target.value); }}
                                         className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                         placeholder="product-slug"
                                     />

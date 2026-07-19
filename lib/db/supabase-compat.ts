@@ -242,6 +242,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
   private onConflictCols: string[] | null = null;
   private returnRows = false;
   private singleMode: "none" | "single" | "maybe" = "none";
+  private embedOrders: Record<string, OrderSpec[]> = {};
 
   constructor(table: string) {
     this.table = table;
@@ -327,7 +328,26 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     return this;
   }
 
-  order(col: string, opts?: { ascending?: boolean; nullsFirst?: boolean }) {
+  order(
+    col: string,
+    opts?: {
+      ascending?: boolean;
+      nullsFirst?: boolean;
+      foreignTable?: string;
+      referencedTable?: string;
+    }
+  ) {
+    const embedTarget = opts?.foreignTable || opts?.referencedTable;
+    if (embedTarget) {
+      // ordering of an embedded resource, applied when the embed is resolved
+      if (!this.embedOrders[embedTarget]) this.embedOrders[embedTarget] = [];
+      this.embedOrders[embedTarget].push({
+        col,
+        ascending: opts?.ascending !== false,
+        nullsFirst: opts?.nullsFirst,
+      });
+      return this;
+    }
     this.orders.push({
       col,
       ascending: opts?.ascending !== false,
@@ -364,6 +384,16 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
   private buildWhere(params: any[]): string {
     const clauses: string[] = [];
     for (const f of this.filters) {
+      // Filters on embedded-table columns (e.g. .eq('categories.slug', x))
+      // are translated to a subquery via the FK map.
+      if (
+        (f.kind === "cmp" || f.kind === "in" || f.kind === "is") &&
+        f.col &&
+        f.col.includes(".")
+      ) {
+        clauses.push(this.embedFilterClause(f, params));
+        continue;
+      }
       if (f.kind === "cmp") {
         clauses.push(this.cmpClause(f.col!, f.op!, f.value, params));
       } else if (f.kind === "in") {
@@ -395,6 +425,39 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
       }
     }
     return clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+  }
+
+  // Translate a filter on `<embedTable>.<column>` into an FK subquery:
+  //   forward (products -> categories):  category_id IN (SELECT id FROM categories WHERE ...)
+  //   reverse (products <- product_images): id IN (SELECT product_id FROM product_images WHERE ...)
+  private embedFilterClause(f: Filter, params: any[]): string {
+    const dot = f.col!.indexOf(".");
+    const embedTable = f.col!.slice(0, dot);
+    const innerCol = f.col!.slice(dot + 1);
+
+    let inner: string;
+    if (f.kind === "in") {
+      if (!f.values || f.values.length === 0) return "false";
+      const ph = f.values.map((v) => {
+        params.push(v);
+        return `$${params.length}`;
+      });
+      inner = `${ident(innerCol)} IN (${ph.join(",")})`;
+    } else if (f.kind === "is") {
+      inner = this.isClause(innerCol, f.value);
+    } else {
+      inner = this.cmpClause(innerCol, f.op!, f.value, params);
+    }
+
+    const fwd = (FK_MAP[this.table] || []).find((e) => e.foreignTable === embedTable);
+    if (fwd) {
+      return `${ident(fwd.column)} IN (SELECT ${ident(fwd.foreignColumn)} FROM ${ident(embedTable)} WHERE ${inner})`;
+    }
+    const rev = (FK_MAP[embedTable] || []).find((e) => e.foreignTable === this.table);
+    if (rev) {
+      return `${ident(rev.foreignColumn)} IN (SELECT ${ident(rev.column)} FROM ${ident(embedTable)} WHERE ${inner})`;
+    }
+    throw new Error(`No FK relationship between ${this.table} and ${embedTable}`);
   }
 
   private isClause(col: string, value: any): string {
@@ -585,6 +648,15 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     let hasReverse = false;
     for (const e of parsed.embeds) {
       let fk = e.fkColumn;
+      // an explicit fk column only lives on THIS table for forward embeds;
+      // for reverse embeds (products -> product_images!product_id) it belongs
+      // to the embed table, so we need our id instead
+      if (fk && !(FK_MAP[this.table] || []).some((x) => x.column === fk)) {
+        const rev = (FK_MAP[e.table] || []).find(
+          (x) => x.column === fk && x.foreignTable === this.table
+        );
+        if (rev) fk = undefined;
+      }
       if (!fk) {
         const fwd = (FK_MAP[this.table] || []).find((x) => x.foreignTable === e.table);
         if (fwd) fk = fwd.column;
@@ -613,11 +685,21 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         // fk-column form: prefer the owning table's own FK edge to disambiguate
         // (template_id -> sms_templates vs email_templates depends on the table)
         const own = (FK_MAP[this.table] || []).find((e) => e.column === fk);
-        if (own) embedTable = own.foreignTable;
+        if (own) {
+          embedTable = own.foreignTable;
+        } else {
+          // fk column not on THIS table — if it's the embed table's FK back to
+          // us (e.g. products -> product_images!product_id), it's a reverse embed
+          const rev = (FK_MAP[embedTable] || []).find(
+            (e) => e.column === fk && e.foreignTable === this.table
+          );
+          if (rev) fk = undefined;
+        }
       } else {
         const fwd = (FK_MAP[this.table] || []).find((e) => e.foreignTable === embed.table);
         if (fwd) fk = fwd.column;
       }
+      const embedOrderSql = this.embedOrderClause(embed);
       if (fk) {
         // forward embed: current.fk -> related.id  (object)
         const ids = Array.from(
@@ -629,7 +711,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         if (ids.length) {
           const ph = ids.map((_, i) => `$${i + 1}`).join(",");
           const res = await pool.query(
-            `SELECT ${innerCols} FROM ${ident(embedTable)} WHERE ${ident("id")} IN (${ph})`,
+            `SELECT ${innerCols} FROM ${ident(embedTable)} WHERE ${ident("id")} IN (${ph})${embedOrderSql}`,
             ids
           );
           related = res.rows;
@@ -654,7 +736,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         if (parentIds.length) {
           const ph = parentIds.map((_, i) => `$${i + 1}`).join(",");
           const res = await pool.query(
-            `SELECT ${innerCols} FROM ${ident(embedTable)} WHERE ${ident(fkCol)} IN (${ph})`,
+            `SELECT ${innerCols} FROM ${ident(embedTable)} WHERE ${ident(fkCol)} IN (${ph})${embedOrderSql}`,
             parentIds
           );
           related = res.rows;
@@ -671,6 +753,20 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         for (const r of rows) r[embed.alias] = grouped.get(r.id) ?? [];
       }
     }
+  }
+
+  private embedOrderClause(embed: EmbedSpec): string {
+    const specs = this.embedOrders[embed.alias] || this.embedOrders[embed.table];
+    if (!specs || specs.length === 0) return "";
+    const parts = specs.map((o) => {
+      const dir = o.ascending ? "ASC" : "DESC";
+      const nulls =
+        o.nullsFirst === undefined
+          ? o.ascending ? "NULLS LAST" : "NULLS FIRST"
+          : o.nullsFirst ? "NULLS FIRST" : "NULLS LAST";
+      return `${ident(o.col)} ${dir} ${nulls}`;
+    });
+    return ` ORDER BY ${parts.join(", ")}`;
   }
 
   private embedColumns(parsed: ParsedSelect, extraFk?: string): string {
@@ -967,6 +1063,21 @@ export function applyPostgrestParams(
       qb.or(inner);
       continue;
     }
+    // embedded-resource ordering: product_images.order=position.asc
+    if (key.endsWith(".order")) {
+      const target = key.slice(0, -".order".length);
+      for (const part of raw.split(",")) {
+        const bits = part.trim().split(".");
+        qb.order(bits[0], {
+          ascending: bits[1] !== "desc",
+          nullsFirst: bits.includes("nullsfirst"),
+          foreignTable: target,
+        });
+      }
+      continue;
+    }
+    // embed limit/offset params are not supported — ignore rather than fail
+    if (key.endsWith(".limit") || key.endsWith(".offset")) continue;
     // column filter: col=op.value
     const dot = raw.indexOf(".");
     if (dot === -1) continue;
