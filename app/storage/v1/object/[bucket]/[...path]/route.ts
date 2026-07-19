@@ -21,10 +21,33 @@ export async function POST(
   const { bucket, path } = await ctx.params;
   const objectPath = path.map(decodeURIComponent).join("/");
   const upsert = (req.headers.get("x-upsert") || "").toLowerCase() === "true";
-  const contentType =
-    req.headers.get("content-type") || "application/octet-stream";
+  const reqContentType = req.headers.get("content-type") || "";
 
-  const buf = Buffer.from(await req.arrayBuffer());
+  // Browser supabase-js wraps File/Blob uploads in multipart FormData
+  // (field name "" plus a cacheControl field); Node/server callers send
+  // raw bytes. Handle both.
+  let buf: Buffer;
+  let contentType = reqContentType || "application/octet-stream";
+  if (reqContentType.includes("multipart/form-data")) {
+    const form = await req.formData();
+    let file: File | null = null;
+    for (const [, value] of form.entries()) {
+      if (value instanceof File) {
+        file = value;
+        break;
+      }
+    }
+    if (!file) {
+      return NextResponse.json(
+        { error: "No file found in multipart body" },
+        { status: 400 }
+      );
+    }
+    buf = Buffer.from(await file.arrayBuffer());
+    contentType = file.type || "application/octet-stream";
+  } else {
+    buf = Buffer.from(await req.arrayBuffer());
+  }
   const storage = createStorageClient();
   const { data, error } = await storage.from(bucket).upload(objectPath, buf, {
     contentType,
