@@ -33,11 +33,11 @@ export default function Footer() {
   const contactEmail = getSetting('contact_email') || '';
   const contactPhone = getSetting('contact_phone') || '+233 209 597 443';
   const socialFacebook = getSetting('social_facebook') || '';
-  const socialInstagram = getSetting('social_instagram') || '#';
-  const socialTwitter = getSetting('social_twitter') || '#';
-  const socialTiktok = getSetting('social_tiktok') || '#';
-  const socialSnapchat = getSetting('social_snapchat') || '#';
-  const socialYoutube = getSetting('social_youtube') || '#';
+  const socialInstagram = getSetting('social_instagram') || '';
+  const socialTwitter = getSetting('social_twitter') || '';
+  const socialTiktok = getSetting('social_tiktok') || '';
+  const socialSnapchat = getSetting('social_snapchat') || '';
+  const socialYoutube = getSetting('social_youtube') || '';
 
   const handleSubscribe = (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,9 +93,10 @@ export default function Footer() {
                   { link: socialTwitter, icon: 'ri-twitter-x-fill', label: 'Twitter' },
                   { link: socialFacebook, icon: 'ri-facebook-fill', label: 'Facebook' },
                   { link: socialYoutube, icon: 'ri-youtube-fill', label: 'YouTube' }
-                ].map((social, i) => social.link && (
+                ].filter((social) => social.link && social.link !== '#')
+                  .map((social) => (
                   <a
-                    key={i}
+                    key={social.label}
                     href={social.link}
                     target="_blank"
                     rel="noopener noreferrer"

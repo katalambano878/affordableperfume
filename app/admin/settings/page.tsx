@@ -21,6 +21,7 @@ export default function SiteSettings() {
         site_url: '',
         og_image: '',
         social_instagram: '',
+        social_tiktok: '',
         announcement_text: '',
         announcement_bg_color: '#1e40af'
     });
@@ -298,6 +299,16 @@ export default function SiteSettings() {
                                     onChange={(e) => handleChange('social_instagram', e.target.value)}
                                     className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500"
                                     placeholder="https://instagram.com/..."
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">TikTok URL</label>
+                                <input
+                                    type="text"
+                                    value={settings.social_tiktok}
+                                    onChange={(e) => handleChange('social_tiktok', e.target.value)}
+                                    className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="https://www.tiktok.com/@..."
                                 />
                             </div>
                         </div>
