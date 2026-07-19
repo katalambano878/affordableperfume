@@ -104,7 +104,13 @@ export async function POST(
   if (body == null) return jsonError("Invalid JSON body");
 
   const client = createClient();
-  let qb = client.from(table).insert(body);
+  // supabase-js upsert => Prefer: resolution=merge-duplicates (+ ?on_conflict=col)
+  const prefer = req.headers.get("prefer") || "";
+  const isUpsert = prefer.includes("resolution=merge-duplicates");
+  const onConflict = req.nextUrl.searchParams.get("on_conflict") || undefined;
+  let qb = isUpsert
+    ? client.from(table).upsert(body, onConflict ? { onConflict } : undefined)
+    : client.from(table).insert(body);
   if (preferReturn(req) || preferSingle(req)) {
     qb = qb.select("*") as typeof qb;
   }

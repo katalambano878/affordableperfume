@@ -24,7 +24,7 @@
 // ============================================================================
 
 import { getPool } from "./pool";
-import { FK_MAP, JSONB_COLUMNS, type FkEdge } from "./fk-map";
+import { FK_MAP, JSONB_COLUMNS } from "./fk-map";
 import { createStorageClient, type StorageClient } from "./storage";
 
 type Row = Record<string, any>;
@@ -190,17 +190,12 @@ function guessTableFromFk(fkColumn: string): string {
   // group_id -> groups, user_id -> users, membership_id -> group_memberships,
   // template_id -> (sms|email)_templates, schedule_id -> contribution_schedules
   const map: Record<string, string> = {
-    group_id: "groups",
-    user_id: "users",
-    membership_id: "group_memberships",
-    schedule_id: "contribution_schedules",
-    contribution_schedule_id: "contribution_schedules",
-    payment_transaction_id: "payment_transactions",
-    payment_intent_id: "payment_intents",
-    payout_schedule_id: "payout_schedules",
-    wallet_id: "wallets",
-    wallet_transaction_id: "wallet_transactions",
+    user_id: "profiles",
+    author_id: "profiles",
+    reviewed_by: "profiles",
+    category_id: "categories",
     ticket_id: "support_tickets",
+    menu_id: "navigation_menus",
   };
   if (map[fkColumn]) return map[fkColumn];
   if (fkColumn.endsWith("_id")) return fkColumn.slice(0, -3) + "s";
@@ -672,31 +667,38 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     return Array.from(cols).join(", ");
   }
 
-  private async resolveEmbeds(rows: Row[], parsed: ParsedSelect): Promise<void> {
+  // `table` is the table the given rows belong to — for nested embeds this is
+  // the parent EMBED's table, not the builder's top-level table.
+  private async resolveEmbeds(
+    rows: Row[],
+    parsed: ParsedSelect,
+    table: string = this.table
+  ): Promise<void> {
     if (rows.length === 0 || parsed.embeds.length === 0) return;
     const pool = getPool();
     for (const embed of parsed.embeds) {
       // If no explicit FK column, decide direction from the FK map: an edge
-      // from THIS table to the embed table means forward (object); otherwise
-      // it's a reverse has-many (array).
+      // from the owning table to the embed table means forward (object);
+      // otherwise it's a reverse has-many (array).
       let fk = embed.fkColumn;
       let embedTable = embed.table;
       if (fk) {
         // fk-column form: prefer the owning table's own FK edge to disambiguate
         // (template_id -> sms_templates vs email_templates depends on the table)
-        const own = (FK_MAP[this.table] || []).find((e) => e.column === fk);
+        const own = (FK_MAP[table] || []).find((e) => e.column === fk);
         if (own) {
           embedTable = own.foreignTable;
         } else {
-          // fk column not on THIS table — if it's the embed table's FK back to
-          // us (e.g. products -> product_images!product_id), it's a reverse embed
+          // fk column not on the owning table — if it's the embed table's FK
+          // back to us (e.g. products -> product_images!product_id), it's a
+          // reverse embed
           const rev = (FK_MAP[embedTable] || []).find(
-            (e) => e.column === fk && e.foreignTable === this.table
+            (e) => e.column === fk && e.foreignTable === table
           );
           if (rev) fk = undefined;
         }
       } else {
-        const fwd = (FK_MAP[this.table] || []).find((e) => e.foreignTable === embed.table);
+        const fwd = (FK_MAP[table] || []).find((e) => e.foreignTable === embed.table);
         if (fwd) fk = fwd.column;
       }
       const embedOrderSql = this.embedOrderClause(embed);
@@ -717,8 +719,8 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
           related = res.rows;
         }
         const byId = new Map(related.map((r) => [r.id, r]));
-        // resolve nested embeds
-        await this.resolveEmbeds(related, embed.select);
+        // resolve nested embeds relative to the embed's own table
+        await this.resolveEmbeds(related, embed.select, embedTable);
         // PostgREST only returns requested columns — drop the join-only id
         if (!wantId) for (const r of related) delete r.id;
         for (const r of rows) {
@@ -726,9 +728,28 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         }
       } else {
         // reverse embed (has-many): related.<table>_fk -> current.id (array)
-        const edge = this.findReverseEdge(embedTable);
-        const fkCol = edge?.column ?? `${singularize(this.table)}_id`;
+        const edge = (FK_MAP[embedTable] || []).find((e) => e.foreignTable === table);
+        const fkCol = edge?.column ?? `${singularize(table)}_id`;
         const parentIds = Array.from(new Set(rows.map((r) => r.id).filter(Boolean)));
+        // PostgREST count aggregate:  product_variants(count)  ->  [{ count: n }]
+        const countOnly =
+          !embed.select.star &&
+          embed.select.embeds.length === 0 &&
+          embed.select.columns.length === 1 &&
+          embed.select.columns[0] === "count";
+        if (countOnly) {
+          const counts = new Map<any, number>();
+          if (parentIds.length) {
+            const ph = parentIds.map((_, i) => `$${i + 1}`).join(",");
+            const res = await pool.query(
+              `SELECT ${ident(fkCol)} AS k, count(*)::int AS count FROM ${ident(embedTable)} WHERE ${ident(fkCol)} IN (${ph}) GROUP BY 1`,
+              parentIds
+            );
+            for (const r of res.rows) counts.set(r.k, r.count);
+          }
+          for (const r of rows) r[embed.alias] = [{ count: counts.get(r.id) ?? 0 }];
+          continue;
+        }
         const wantId = embedWantsId(embed.select);
         const wantFk = embed.select.star || embed.select.columns.includes(fkCol);
         const innerCols = this.embedColumns(embed.select, fkCol);
@@ -741,7 +762,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
           );
           related = res.rows;
         }
-        await this.resolveEmbeds(related, embed.select);
+        await this.resolveEmbeds(related, embed.select, embedTable);
         const grouped = new Map<any, Row[]>();
         for (const r of related) {
           const k = r[fkCol];
@@ -778,10 +799,6 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     if (extraFk) cols.add(ident(extraFk));
     for (const e of parsed.embeds) if (e.fkColumn) cols.add(ident(e.fkColumn));
     return Array.from(cols).join(", ");
-  }
-
-  private findReverseEdge(relatedTable: string): FkEdge | undefined {
-    return (FK_MAP[relatedTable] || []).find((e) => e.foreignTable === this.table);
   }
 
   private async execInsert(pool: ReturnType<typeof getPool>): Promise<Row[]> {

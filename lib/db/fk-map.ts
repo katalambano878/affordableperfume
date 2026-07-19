@@ -22,12 +22,28 @@ export const JSONB_COLUMNS: Record<string, Set<string>> = {
 };
 
 export const FK_MAP: Record<string, FkEdge[]> = {
+  addresses: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
+  audit_logs: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
+  blog_posts: [
+    { column: "author_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
   cart_items: [
     { column: "product_id", foreignTable: "products", foreignColumn: "id" },
     { column: "variant_id", foreignTable: "product_variants", foreignColumn: "id" },
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
   categories: [
     { column: "parent_id", foreignTable: "categories", foreignColumn: "id" },
+  ],
+  customers: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
+  notifications: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
   navigation_items: [
     { column: "menu_id", foreignTable: "navigation_menus", foreignColumn: "id" },
@@ -40,6 +56,9 @@ export const FK_MAP: Record<string, FkEdge[]> = {
   ],
   order_status_history: [
     { column: "order_id", foreignTable: "orders", foreignColumn: "id" },
+  ],
+  orders: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
   product_images: [
     { column: "product_id", foreignTable: "products", foreignColumn: "id" },
@@ -56,17 +75,28 @@ export const FK_MAP: Record<string, FkEdge[]> = {
   ],
   return_requests: [
     { column: "order_id", foreignTable: "orders", foreignColumn: "id" },
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
   review_images: [
     { column: "review_id", foreignTable: "reviews", foreignColumn: "id" },
   ],
   reviews: [
     { column: "product_id", foreignTable: "products", foreignColumn: "id" },
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
   support_messages: [
     { column: "ticket_id", foreignTable: "support_tickets", foreignColumn: "id" },
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
+  support_tickets: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+  ],
+  wholesale_applications: [
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
+    { column: "reviewed_by", foreignTable: "profiles", foreignColumn: "id" },
   ],
   wishlist_items: [
     { column: "product_id", foreignTable: "products", foreignColumn: "id" },
+    { column: "user_id", foreignTable: "profiles", foreignColumn: "id" },
   ],
 };
