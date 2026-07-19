@@ -708,7 +708,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
           new Set(rows.map((r) => r[fk]).filter((v) => v !== null && v !== undefined))
         );
         const wantId = embedWantsId(embed.select);
-        const innerCols = this.embedColumns(embed.select);
+        const innerCols = this.embedColumns(embed.select, embedTable);
         let related: Row[] = [];
         if (ids.length) {
           const ph = ids.map((_, i) => `$${i + 1}`).join(",");
@@ -752,7 +752,7 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
         }
         const wantId = embedWantsId(embed.select);
         const wantFk = embed.select.star || embed.select.columns.includes(fkCol);
-        const innerCols = this.embedColumns(embed.select, fkCol);
+        const innerCols = this.embedColumns(embed.select, embedTable, fkCol);
         let related: Row[] = [];
         if (parentIds.length) {
           const ph = parentIds.map((_, i) => `$${i + 1}`).join(",");
@@ -790,14 +790,24 @@ class QueryBuilder implements PromiseLike<{ data: any; error: any; count: number
     return ` ORDER BY ${parts.join(", ")}`;
   }
 
-  private embedColumns(parsed: ParsedSelect, extraFk?: string): string {
+  // `table` is the embed's own table — needed to pull in the FK columns its
+  // nested forward embeds join on (e.g. order_items.product_id for
+  // order_items(products(...)) even when product_id isn't selected).
+  private embedColumns(parsed: ParsedSelect, table: string, extraFk?: string): string {
     if (parsed.star && parsed.columns.length === 0) return "*";
     const cols = new Set<string>();
     if (parsed.star) cols.add("*");
     for (const c of parsed.columns) cols.add(ident(c));
     cols.add(ident("id"));
     if (extraFk) cols.add(ident(extraFk));
-    for (const e of parsed.embeds) if (e.fkColumn) cols.add(ident(e.fkColumn));
+    for (const e of parsed.embeds) {
+      if (e.fkColumn && (FK_MAP[table] || []).some((x) => x.column === e.fkColumn)) {
+        cols.add(ident(e.fkColumn));
+      } else {
+        const fwd = (FK_MAP[table] || []).find((x) => x.foreignTable === e.table);
+        if (fwd) cols.add(ident(fwd.column));
+      }
+    }
     return Array.from(cols).join(", ");
   }
 
