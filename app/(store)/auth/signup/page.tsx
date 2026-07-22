@@ -2,10 +2,10 @@
 
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import PasswordStrengthMeter from '@/components/PasswordStrengthMeter';
 import { supabase } from '@/lib/supabase';
 import { useRecaptcha } from '@/hooks/useRecaptcha';
+import { redirectAfterAuth } from '@/lib/auth-session';
 
 function getFriendlyError(message: string): string {
   const lower = message.toLowerCase();
@@ -28,7 +28,6 @@ function getFriendlyError(message: string): string {
 }
 
 export default function SignupPage() {
-  const router = useRouter();
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const redirectTo = searchParams?.get('redirect') || '/account';
   const errorRef = useRef<HTMLDivElement>(null);
@@ -133,8 +132,8 @@ export default function SignupPage() {
         if (!data.session) {
           setSuccess(true);
         } else {
-          router.push(redirectTo);
-          router.refresh();
+          redirectAfterAuth(redirectTo);
+          return;
         }
       }
     } catch (err: any) {

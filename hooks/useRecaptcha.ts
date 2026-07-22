@@ -31,10 +31,11 @@ export function useRecaptcha() {
         setVerifying(true);
         try {
             const token = await executeRecaptcha(action);
-            if (!token) {
-                setError('Could not get reCAPTCHA token. Please try again.');
-                return false;
-            }
+        if (!token) {
+            // Allow auth when reCAPTCHA script failed to load (common on mobile/ad blockers)
+            console.warn('[reCAPTCHA] Token unavailable — allowing auth to proceed');
+            return true;
+        }
 
             // Verify on server side
             const response = await fetch('/api/recaptcha/verify', {

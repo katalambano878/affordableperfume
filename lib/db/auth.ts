@@ -201,6 +201,13 @@ export async function signUpWithPassword(opts: {
   const id = randomUUID();
   const hash = bcrypt.hashSync(opts.password, 10);
   const meta = opts.data || {};
+  const firstName = String(meta.first_name || '').trim();
+  const lastName = String(meta.last_name || '').trim();
+  const fullName =
+    [firstName, lastName].filter(Boolean).join(' ') ||
+    String(meta.full_name || '').trim() ||
+    email.split('@')[0];
+  const phone = String(meta.phone || '').trim();
 
   await query(
     `INSERT INTO auth.users (
@@ -216,12 +223,24 @@ export async function signUpWithPassword(opts: {
     [id, email, hash, JSON.stringify(meta)]
   );
 
-  // Ensure profile row exists (app expects profiles.id = auth.users.id)
   await query(
-    `INSERT INTO profiles (id, email, full_name, role, created_at, updated_at)
-     VALUES ($1, $2, $3, 'customer', now(), now())
-     ON CONFLICT (id) DO NOTHING`,
-    [id, email, (meta.full_name as string) || email.split("@")[0]]
+    `INSERT INTO profiles (id, email, full_name, phone, role, created_at, updated_at)
+     VALUES ($1, $2, $3, NULLIF($4, ''), 'customer', now(), now())
+     ON CONFLICT (id) DO UPDATE SET
+       email = EXCLUDED.email,
+       full_name = COALESCE(NULLIF(EXCLUDED.full_name, ''), profiles.full_name),
+       phone = COALESCE(NULLIF(EXCLUDED.phone, ''), profiles.phone),
+       updated_at = now()`,
+    [id, email, fullName, phone]
+  ).catch(() => {});
+
+  await query(
+    `INSERT INTO customers (id, user_id, email, full_name, first_name, last_name, phone, created_at, updated_at)
+     SELECT gen_random_uuid(), $1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), now(), now()
+     WHERE NOT EXISTS (
+       SELECT 1 FROM customers WHERE user_id = $1 OR lower(email) = lower($2)
+     )`,
+    [id, email, fullName, firstName, lastName, phone]
   ).catch(() => {});
 
   const { rows } = await query(`SELECT * FROM auth.users WHERE id = $1`, [id]);

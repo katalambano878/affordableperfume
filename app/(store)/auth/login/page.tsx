@@ -2,12 +2,11 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useRecaptcha } from '@/hooks/useRecaptcha';
+import { redirectAfterAuth } from '@/lib/auth-session';
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const redirectTo = searchParams?.get('redirect') || '/account';
   const [formData, setFormData] = useState({
@@ -63,9 +62,11 @@ export default function LoginPage() {
       }
 
       if (data.session) {
-        router.push(redirectTo);
-        router.refresh();
+        redirectAfterAuth(redirectTo);
+        return;
       }
+
+      setAuthError('Sign in succeeded but no session was returned. Please try again.');
     } catch (error: any) {
       console.error('Login error:', error);
       setAuthError(error.message || 'Failed to sign in. Please check your credentials.');

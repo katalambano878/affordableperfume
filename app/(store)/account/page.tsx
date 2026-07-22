@@ -6,6 +6,7 @@ import Link from 'next/link';
 import OrderHistory from './OrderHistory';
 import AddressBook from './AddressBook';
 import { supabase } from '@/lib/supabase';
+import { clearSupabaseAuthStorage, redirectAfterAuth } from '@/lib/auth-session';
 
 function AccountContent() {
   const router = useRouter();
@@ -115,8 +116,8 @@ function AccountContent() {
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    router.push('/auth/login');
-    router.refresh();
+    clearSupabaseAuthStorage();
+    redirectAfterAuth('/auth/login');
   };
 
   if (loading) {
