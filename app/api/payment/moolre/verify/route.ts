@@ -81,34 +81,44 @@ export async function POST(req: Request) {
             }, { status: 503 });
         }
 
+        const refsToTry = [
+            order.metadata?.moolre_payment_ref,
+            orderNumber,
+        ].filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
+
         try {
-            const checkResponse = await fetch('https://api.moolre.com/embed/status', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-API-USER': process.env.MOOLRE_API_USER,
-                    'X-API-PUBKEY': process.env.MOOLRE_API_PUBKEY
-                },
-                body: JSON.stringify({ externalref: orderNumber })
-            });
+            for (const externalref of refsToTry) {
+                const checkResponse = await fetch('https://api.moolre.com/embed/status', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-USER': process.env.MOOLRE_API_USER,
+                        'X-API-PUBKEY': process.env.MOOLRE_API_PUBKEY
+                    },
+                    body: JSON.stringify({ externalref })
+                });
 
-            const checkResult = await checkResponse.json();
-            console.log('[Verify] Moolre API response:', JSON.stringify(checkResult));
+                const checkResult = await checkResponse.json();
+                console.log('[Verify] Moolre API response for', externalref, ':', JSON.stringify(checkResult));
 
-            // Strict verification: require explicit success status
-            const statusStr = String(checkResult.data?.status || '').toLowerCase();
-            moolreApiVerified =
-                (checkResult.status === 1 && checkResult.data) &&
-                (statusStr === 'success' || statusStr === 'successful' || statusStr === 'completed' || statusStr === 'paid');
+                const statusStr = String(checkResult.data?.status || '').toLowerCase();
+                const verified =
+                    (checkResult.status === 1 && checkResult.data) &&
+                    (statusStr === 'success' || statusStr === 'successful' || statusStr === 'completed' || statusStr === 'paid');
 
-            // Also verify the amount matches
-            if (moolreApiVerified && checkResult.data?.amount) {
-                const paidAmount = parseFloat(checkResult.data.amount);
-                const expectedAmount = Number(order.total);
-                if (Math.abs(paidAmount - expectedAmount) > 0.01) {
-                    console.error('[Verify] AMOUNT MISMATCH! Expected:', expectedAmount, 'Got:', paidAmount);
-                    moolreApiVerified = false;
+                if (!verified) continue;
+
+                if (checkResult.data?.amount) {
+                    const paidAmount = parseFloat(checkResult.data.amount);
+                    const expectedAmount = Number(order.total);
+                    if (Math.abs(paidAmount - expectedAmount) > 0.01) {
+                        console.error('[Verify] AMOUNT MISMATCH! Expected:', expectedAmount, 'Got:', paidAmount);
+                        continue;
+                    }
                 }
+
+                moolreApiVerified = true;
+                break;
             }
 
         } catch (moolreError: any) {

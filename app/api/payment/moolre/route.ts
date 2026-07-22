@@ -39,7 +39,7 @@ export async function POST(req: Request) {
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orderId);
         const { data: order, error: orderError } = await supabaseAdmin
             .from('orders')
-            .select('id, order_number, total, email, payment_status')
+            .select('id, order_number, total, email, payment_status, metadata')
             .eq(isUuid ? 'id' : 'order_number', orderId)
             .single();
 
@@ -66,6 +66,19 @@ export async function POST(req: Request) {
 
         // Generate a unique external reference for Moolre
         const uniqueRef = `${orderRef}-R${Date.now()}`;
+
+        // Persist Moolre ref so verify/status checks can find this payment attempt
+        const existingMeta = (order.metadata && typeof order.metadata === 'object') ? order.metadata : {};
+        await supabaseAdmin
+            .from('orders')
+            .update({
+                metadata: {
+                    ...existingMeta,
+                    payment_method: 'moolre',
+                    moolre_payment_ref: uniqueRef,
+                },
+            })
+            .eq('id', order.id);
 
         // Moolre Payload
         const payload = {
