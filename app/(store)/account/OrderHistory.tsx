@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { resolveStorageUrl } from '@/lib/storage-url';
 
 interface Order {
   id: string;
   orderNumber: string;
   date: string;
   status: string;
+  paymentStatus?: string;
   total: number;
   items: {
     id: string;
@@ -29,28 +31,49 @@ export default function OrderHistory() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const { data, error } = await supabase
+        const userEmail = session.user.email?.toLowerCase();
+        const { data: byUserId, error: userIdError } = await supabase
           .from('orders')
-          .select(`
-                    *,
-                    order_items (*)
-                `)
+          .select(`*, order_items (*)`)
           .eq('user_id', session.user.id)
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        if (userIdError) throw userIdError;
 
-        if (data) {
-          const formattedOrders = data.map((order: any) => ({
+        let merged = byUserId || [];
+
+        // Include guest checkout orders placed with the same email
+        if (userEmail) {
+          const { data: byEmail, error: emailError } = await supabase
+            .from('orders')
+            .select(`*, order_items (*)`)
+            .ilike('email', userEmail)
+            .order('created_at', { ascending: false });
+
+          if (emailError) throw emailError;
+
+          const seen = new Set(merged.map((o: any) => o.id));
+          for (const order of byEmail || []) {
+            if (!seen.has(order.id)) merged.push(order);
+          }
+          merged.sort(
+            (a: any, b: any) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
+        }
+
+        if (merged.length > 0) {
+          const formattedOrders = merged.map((order: any) => ({
             id: order.id,
             orderNumber: order.order_number,
             date: order.created_at,
             status: order.status,
+            paymentStatus: order.payment_status,
             total: order.total,
-            items: order.order_items.map((item: any) => ({
+            items: (order.order_items || []).map((item: any) => ({
               id: item.id,
               name: item.product_name,
-              image: item.metadata?.image || 'https://via.placeholder.com/150',
+              image: resolveStorageUrl(item.metadata?.image),
               quantity: item.quantity,
               price: item.unit_price
             }))
@@ -151,10 +174,15 @@ export default function OrderHistory() {
                     <p className="font-bold text-blue-700">GH₵{order.total.toFixed(2)}</p>
                   </div>
                 </div>
-                <div className="w-full sm:w-auto">
+                <div className="w-full sm:w-auto flex flex-col items-start sm:items-end gap-1">
                   <span className={`inline-block px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap ${getStatusColor(order.status)}`}>
                     {order.status === 'shipped' ? 'Packaged' : order.status.replace('_', ' ').replace(/^\w/, (c: string) => c.toUpperCase())}
                   </span>
+                  {order.paymentStatus && order.paymentStatus !== 'paid' && (
+                    <span className="text-xs font-medium text-amber-700">
+                      Payment {order.paymentStatus === 'failed' ? 'failed' : 'pending'}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

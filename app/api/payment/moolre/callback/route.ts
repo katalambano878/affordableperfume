@@ -71,24 +71,23 @@ export async function POST(req: Request) {
         console.log('[Callback] Data keys:', body.data ? Object.keys(body.data).join(', ') : 'no data object');
 
         // ============================================================
-        // SECURITY: Verify callback secret FIRST (mandatory)
+        // EXTRACT FIELDS - Moolre nests payment data inside body.data
+        // ============================================================
+        const data = body.data || {};
+
+        // ============================================================
+        // SECURITY: Verify callback secret (Moolre puts it in body.data.secret)
         // ============================================================
         const expectedSecret = process.env.MOOLRE_CALLBACK_SECRET;
+        const callbackSecret = body.secret || data.secret;
         if (expectedSecret) {
-            // If we have a configured secret, the callback MUST match it
-            if (!body.secret || body.secret !== expectedSecret) {
+            if (!callbackSecret || callbackSecret !== expectedSecret) {
                 console.error('[Callback] Secret mismatch or missing! Rejecting callback.');
                 return NextResponse.json({ success: false, message: 'Invalid callback signature' }, { status: 403 });
             }
         } else {
-            // Log a warning if no secret is configured — this should be fixed
             console.warn('[Callback] WARNING: MOOLRE_CALLBACK_SECRET not configured. Callback origin cannot be verified.');
         }
-
-        // ============================================================
-        // EXTRACT FIELDS - Moolre nests payment data inside body.data
-        // ============================================================
-        const data = body.data || {};
 
         // Order reference: check body.data.externalref first, then top-level fallbacks
         const rawExternalRef =

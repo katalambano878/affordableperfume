@@ -42,7 +42,7 @@ export default function AdminOrdersPage() {
   const [sortBy, setSortBy] = useState('date');
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orderViewTab, setOrderViewTab] = useState<'confirmed' | 'abandoned'>('confirmed');
+  const [orderViewTab, setOrderViewTab] = useState<'all' | 'confirmed' | 'abandoned'>('all');
   const [sendingPaymentLink, setSendingPaymentLink] = useState<string | null>(null);
   const [orderStats, setOrderStats] = useState<OrderStats[]>([
     { label: 'All Orders', count: 0, status: 'all' },
@@ -109,14 +109,14 @@ export default function AdminOrdersPage() {
       setConfirmedCount(confirmedOrders.length);
       setAbandonedCount(abandonedOrders.length);
 
-      // Calculate stats based on confirmed orders only
+      const allOrders = ordersData || [];
       const stats = [
-        { label: 'All Orders', count: confirmedOrders.length, status: 'all' },
-        { label: 'Pending', count: confirmedOrders.filter(o => o.status === 'pending').length, status: 'pending' },
-        { label: 'Processing', count: confirmedOrders.filter(o => o.status === 'processing').length, status: 'processing' },
-        { label: 'Packaged', count: confirmedOrders.filter(o => o.status === 'shipped').length, status: 'shipped' },
-        { label: 'Delivered', count: confirmedOrders.filter(o => o.status === 'delivered').length, status: 'delivered' },
-        { label: 'Cancelled', count: confirmedOrders.filter(o => o.status === 'cancelled').length, status: 'cancelled' }
+        { label: 'All Orders', count: allOrders.length, status: 'all' },
+        { label: 'Pending', count: allOrders.filter(o => o.status === 'pending').length, status: 'pending' },
+        { label: 'Processing', count: allOrders.filter(o => o.status === 'processing').length, status: 'processing' },
+        { label: 'Packaged', count: allOrders.filter(o => o.status === 'shipped').length, status: 'shipped' },
+        { label: 'Delivered', count: allOrders.filter(o => o.status === 'delivered').length, status: 'delivered' },
+        { label: 'Cancelled', count: allOrders.filter(o => o.status === 'cancelled').length, status: 'cancelled' }
       ];
       setOrderStats(stats);
 
@@ -311,9 +311,14 @@ export default function AdminOrdersPage() {
     const customerEmail = getCustomerEmail(order).toLowerCase();
     const orderId = (order.order_number || order.id).toLowerCase();
 
-    // First filter by view tab (confirmed vs abandoned)
+    // Filter by view tab (all / paid / awaiting payment)
     const isConfirmed = order.payment_status === 'paid';
-    const matchesViewTab = orderViewTab === 'confirmed' ? isConfirmed : !isConfirmed;
+    const matchesViewTab =
+      orderViewTab === 'all'
+        ? true
+        : orderViewTab === 'confirmed'
+          ? isConfirmed
+          : !isConfirmed;
 
     const matchesSearch = orderId.includes(searchQuery.toLowerCase()) ||
       customerName.includes(searchQuery.toLowerCase()) ||
@@ -349,33 +354,44 @@ export default function AdminOrdersPage() {
         </div>
       </div>
 
-      {/* View Tabs: Confirmed Orders vs Abandoned Carts */}
-      <div className="flex border-b border-gray-200">
+      {/* View Tabs */}
+      <div className="flex border-b border-gray-200 overflow-x-auto">
+        <button
+          onClick={() => { setOrderViewTab('all'); setStatusFilter('all'); }}
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
+            orderViewTab === 'all'
+              ? 'border-blue-700 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <i className="ri-list-check-2 mr-2"></i>
+          All Orders ({orders.length})
+        </button>
         <button
           onClick={() => { setOrderViewTab('confirmed'); setStatusFilter('all'); }}
-          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
             orderViewTab === 'confirmed'
               ? 'border-blue-700 text-blue-700'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
           <i className="ri-check-double-line mr-2"></i>
-          Confirmed Orders ({confirmedCount})
+          Paid Orders ({confirmedCount})
         </button>
         <button
           onClick={() => { setOrderViewTab('abandoned'); setStatusFilter('all'); }}
-          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer ${
+          className={`px-6 py-3 font-semibold text-sm border-b-2 transition-colors cursor-pointer whitespace-nowrap ${
             orderViewTab === 'abandoned'
               ? 'border-amber-600 text-amber-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <i className="ri-shopping-cart-2-line mr-2"></i>
-          Abandoned Carts ({abandonedCount})
+          <i className="ri-time-line mr-2"></i>
+          Awaiting Payment ({abandonedCount})
         </button>
       </div>
 
-      {orderViewTab === 'confirmed' && (
+      {(orderViewTab === 'all' || orderViewTab === 'confirmed') && (
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {orderStats.map((stat) => (
           <button
@@ -399,9 +415,9 @@ export default function AdminOrdersPage() {
           <div className="flex items-start space-x-3">
             <i className="ri-information-line text-xl text-amber-600 mt-0.5"></i>
             <div>
-              <p className="text-sm font-semibold text-amber-800">Abandoned Carts</p>
+              <p className="text-sm font-semibold text-amber-800">Awaiting Payment</p>
               <p className="text-sm text-amber-700 mt-1">
-                These orders were created but payment was not completed. You can resend payment links to customers.
+                These orders were placed but payment has not been confirmed yet. After a customer pays via Moolre, they move to Paid Orders automatically.
               </p>
             </div>
           </div>

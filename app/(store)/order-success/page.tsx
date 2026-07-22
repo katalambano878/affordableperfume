@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { resolveStorageUrl } from '@/lib/storage-url';
 
 function OrderSuccessContent() {
   const searchParams = useSearchParams();
   const orderNumber = searchParams.get('order');
-  const paymentSuccess = searchParams.get('payment_success');
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showConfetti, setShowConfetti] = useState(true);
@@ -34,8 +34,8 @@ function OrderSuccessContent() {
         if (error) throw error;
         setOrder(orderData);
 
-        // If redirected from payment and order is still pending, try to verify
-        if (paymentSuccess === 'true' && orderData && orderData.payment_status !== 'paid') {
+        // Try to confirm payment whenever the order is still unpaid
+        if (orderData && orderData.payment_status !== 'paid') {
           verifyPayment(orderNumber, orderData);
         }
       } catch (err) {
@@ -222,7 +222,7 @@ function OrderSuccessContent() {
                   <div key={item.id} className="flex items-center space-x-4">
                     <div className="w-20 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
                       <img
-                        src={item.metadata?.image || 'https://via.placeholder.com/150'}
+                        src={resolveStorageUrl(item.metadata?.image)}
                         alt={item.product_name}
                         className="w-full h-full object-cover object-center"
                       />
