@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
-import { supabase } from '@/lib/supabase';
+import { serverDb } from '@/lib/server-db';
+import { normalizePublicOrigin, toAbsolutePublicUrl } from '@/lib/site-url';
 import { CartProvider } from "@/context/CartContext";
 import { WishlistProvider } from "@/context/WishlistContext";
 import { CMSProvider } from "@/context/CMSContext";
@@ -18,12 +19,11 @@ async function getSiteSettings() {
   let siteTagline = '';
   let siteDescription = "";
   let siteLogo = '';
-  let siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.affordableperfumesgh.com';
-  if (siteUrl === '' || siteUrl === 'https://example.com') siteUrl = 'https://www.affordableperfumesgh.com';
+  let siteUrl = normalizePublicOrigin(process.env.NEXT_PUBLIC_APP_URL);
   let ogImage = '';
 
   try {
-    const { data } = await supabase.from('site_settings').select('key, value');
+    const { data } = await serverDb.from('site_settings').select('key, value');
     if (data) {
       const settings = data.reduce((acc: any, curr: any) => {
         acc[curr.key] = curr.value;
@@ -34,7 +34,7 @@ async function getSiteSettings() {
       if (settings.site_tagline) siteTagline = settings.site_tagline;
       if (settings.site_description) siteDescription = settings.site_description;
       if (settings.site_logo) siteLogo = settings.site_logo;
-      if (settings.site_url) siteUrl = settings.site_url;
+      if (settings.site_url) siteUrl = normalizePublicOrigin(settings.site_url);
       if (settings.og_image) ogImage = settings.og_image;
     }
   } catch (e) {
@@ -46,13 +46,13 @@ async function getSiteSettings() {
 
 export async function generateMetadata(): Promise<Metadata> {
   const { siteName, siteTagline, siteDescription, siteLogo, siteUrl, ogImage: ogImageSetting } = await getSiteSettings();
-  const baseUrl = siteUrl.replace(/\/$/, '');
+  const baseUrl = siteUrl;
   const defaultDescription = 'Authentic perfumes and fragrances delivered across Ghana. Shop affordable designer and niche scents from Accra.';
   const desc = siteDescription || defaultDescription;
   const ogImage = ogImageSetting
-    ? (ogImageSetting.startsWith('http') ? ogImageSetting : `${baseUrl}${ogImageSetting}`)
+    ? toAbsolutePublicUrl(ogImageSetting, baseUrl)
     : siteLogo
-      ? (siteLogo.startsWith('http') ? siteLogo : `${baseUrl}${siteLogo}`)
+      ? toAbsolutePublicUrl(siteLogo, baseUrl)
       : `${baseUrl}/og-default`;
 
   const fullTitle = [siteName, siteTagline].filter(Boolean).join(' | ');
@@ -157,6 +157,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const { siteName, siteDescription, siteLogo, siteUrl } = await getSiteSettings();
+  const origin = normalizePublicOrigin(siteUrl);
+  const logoAbs = siteLogo ? toAbsolutePublicUrl(siteLogo, origin) : `${origin}/logo.svg`;
   return (
     <html lang="en">
       <head>
@@ -190,10 +192,10 @@ export default async function RootLayout({
               "@context": "https://schema.org",
               "@type": "Store",
               "name": siteName || "Affordable Perfumes GH",
-              "url": siteUrl,
-              "logo": siteLogo ? (siteLogo.startsWith('http') ? siteLogo : `${siteUrl}${siteLogo}`) : `${siteUrl}/logo.svg`,
+              "url": origin,
+              "logo": logoAbs,
               "description": siteDescription || "Authentic perfumes and fragrances delivered across Ghana.",
-              "image": siteLogo ? (siteLogo.startsWith('http') ? siteLogo : `${siteUrl}${siteLogo}`) : `${siteUrl}/logo.svg`,
+              "image": logoAbs,
               "priceRange": "GH₵50 - GH₵1500",
               "address": {
                 "@type": "PostalAddress",
@@ -243,12 +245,12 @@ export default async function RootLayout({
               "@context": "https://schema.org",
               "@type": "WebSite",
               "name": siteName || "Affordable Perfumes GH",
-              "url": siteUrl,
+              "url": origin,
               "potentialAction": {
                 "@type": "SearchAction",
                 "target": {
                   "@type": "EntryPoint",
-                  "urlTemplate": `${siteUrl}/shop?search={search_term_string}`
+                  "urlTemplate": `${origin}/shop?search={search_term_string}`
                 },
                 "query-input": "required name=search_term_string"
               }

@@ -1,11 +1,27 @@
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+import { serverDb } from '@/lib/server-db';
 import PageHero from '@/components/PageHero';
 
 export const revalidate = 0; // Ensure fresh data on every visit
 
+type CategoryRow = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  image_url: string | null;
+  position: number | null;
+};
+
+type CategoryCard = CategoryRow & {
+  image: string;
+  color: string;
+  icon: string;
+  productCount: string;
+};
+
 export default async function CategoriesPage() {
-  const { data: categoriesData } = await supabase
+  const { data: categoriesData } = await serverDb
     .from('categories')
     .select(`
       id,
@@ -28,14 +44,14 @@ export default async function CategoriesPage() {
     { color: 'from-indigo-500 to-indigo-700', icon: 'ri-award-line' },
   ];
 
-  const categories = categoriesData?.map((c, i) => {
+  const categories: CategoryCard[] =
+    (categoriesData as CategoryRow[] | null)?.map((c, i) => {
     const style = palette[i % palette.length];
     return {
       ...c,
       image: c.image_url || 'https://via.placeholder.com/600x400?text=Category',
       color: style.color,
       icon: style.icon,
-      // Optional: Fetch product count if needed, currently skipping for performance/simplicity
       productCount: 'Browse',
     };
   }) || [];

@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { jwtVerify } from 'jose';
+import { usePlainPostgresAuth } from './lib/db/mode';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const usePlainPg = process.env.NEXT_PUBLIC_USE_PLAIN_PG === 'true';
+const usePlainPg = usePlainPostgresAuth();
 
 function extractToken(request: NextRequest): string | undefined {
   let token = request.cookies.get('sb-access-token')?.value;
@@ -38,6 +39,22 @@ function extractToken(request: NextRequest): string | undefined {
   }
 
   return token;
+}
+
+async function verifyPlainPgUser(token: string): Promise<boolean> {
+  const secret =
+    process.env.AUTH_JWT_SECRET ||
+    process.env.JWT_SECRET ||
+    process.env.SUPABASE_JWT_SECRET;
+  if (!secret) return false;
+
+  try {
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    if (payload.typ === 'refresh') return false;
+    return typeof payload.sub === 'string' && payload.sub.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 async function verifyPlainPgAdmin(token: string): Promise<{ ok: boolean; userId?: string; role?: string }> {
@@ -98,41 +115,48 @@ export async function middleware(request: NextRequest) {
       return response;
     }
 
-    if (supabaseServiceKey) {
-      try {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-          auth: { autoRefreshToken: false, persistSession: false },
-        });
+    if (!supabaseServiceKey) {
+      const loginUrl = new URL('/admin/login', request.url);
+      loginUrl.searchParams.set('error', 'auth_unconfigured');
+      return NextResponse.redirect(loginUrl);
+    }
 
-        const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser(token);
+    try {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
 
-        if (error || !user) {
-          const loginUrl = new URL('/admin/login', request.url);
-          loginUrl.searchParams.set('redirect', pathname);
-          loginUrl.searchParams.set('error', 'session_expired');
-          return NextResponse.redirect(loginUrl);
-        }
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.getUser(token);
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (!profile || (profile.role !== 'admin' && profile.role !== 'staff')) {
-          const loginUrl = new URL('/admin/login', request.url);
-          loginUrl.searchParams.set('error', 'unauthorized');
-          return NextResponse.redirect(loginUrl);
-        }
-
-        response.headers.set('x-user-id', user.id);
-        response.headers.set('x-user-role', profile.role);
-      } catch (err) {
-        console.error('[Middleware] Auth check error:', err);
+      if (error || !user) {
+        const loginUrl = new URL('/admin/login', request.url);
+        loginUrl.searchParams.set('redirect', pathname);
+        loginUrl.searchParams.set('error', 'session_expired');
+        return NextResponse.redirect(loginUrl);
       }
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      if (!profile || (profile.role !== 'admin' && profile.role !== 'staff')) {
+        const loginUrl = new URL('/admin/login', request.url);
+        loginUrl.searchParams.set('error', 'unauthorized');
+        return NextResponse.redirect(loginUrl);
+      }
+
+      response.headers.set('x-user-id', user.id);
+      response.headers.set('x-user-role', profile.role);
+    } catch (err) {
+      console.error('[Middleware] Auth check error:', err);
+      const loginUrl = new URL('/admin/login', request.url);
+      loginUrl.searchParams.set('error', 'session_expired');
+      return NextResponse.redirect(loginUrl);
     }
   }
 
@@ -145,6 +169,36 @@ export async function middleware(request: NextRequest) {
       const loginUrl = new URL('/auth/login', request.url);
       loginUrl.searchParams.set('redirect', '/wholesale');
       return NextResponse.redirect(loginUrl);
+    }
+
+    if (usePlainPg) {
+      const valid = await verifyPlainPgUser(token);
+      if (!valid) {
+        const loginUrl = new URL('/auth/login', request.url);
+        loginUrl.searchParams.set('redirect', '/wholesale');
+        loginUrl.searchParams.set('error', 'session_expired');
+        return NextResponse.redirect(loginUrl);
+      }
+    } else if (supabaseServiceKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+          auth: { autoRefreshToken: false, persistSession: false },
+        });
+        const {
+          data: { user },
+          error,
+        } = await supabase.auth.getUser(token);
+        if (error || !user) {
+          const loginUrl = new URL('/auth/login', request.url);
+          loginUrl.searchParams.set('redirect', '/wholesale');
+          loginUrl.searchParams.set('error', 'session_expired');
+          return NextResponse.redirect(loginUrl);
+        }
+      } catch {
+        const loginUrl = new URL('/auth/login', request.url);
+        loginUrl.searchParams.set('redirect', '/wholesale');
+        return NextResponse.redirect(loginUrl);
+      }
     }
   }
 

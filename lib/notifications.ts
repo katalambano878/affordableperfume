@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
-import { supabase } from '@/lib/supabase';
+import { serverDb } from '@/lib/server-db';
 import { escapeHtml } from '@/lib/sanitize';
+import { normalizePublicOrigin } from '@/lib/site-url';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'missing_api_key');
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@standardecom.com';
@@ -10,7 +11,7 @@ async function getBrand() {
     let sitePhone = '+233209597443';
 
     try {
-        const { data } = await supabase.from('site_settings').select('key, value');
+        const { data } = await serverDb.from('site_settings').select('key, value');
         if (data) {
             const settings = data.reduce((acc: any, curr: any) => {
                 acc[curr.key] = curr.value;
@@ -27,7 +28,7 @@ async function getBrand() {
         color: '#1a1a1a',
         colorLight: '#f3f4f6',
         colorDark: '#000000',
-        url: (process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(/\/+$/, ''),
+        url: normalizePublicOrigin(process.env.NEXT_PUBLIC_APP_URL).replace(/\/+$/, ''),
         phone: sitePhone,
     };
 }
@@ -242,7 +243,7 @@ export async function sendOrderConfirmation(order: any) {
     // Fetch order items to get preorder_shipping info
     let shippingNotes: string[] = [];
     try {
-        const { data: items } = await supabase
+        const { data: items } = await serverDb
             .from('order_items')
             .select('product_name, metadata')
             .eq('order_id', id);

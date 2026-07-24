@@ -1,17 +1,14 @@
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ProductDetailClient from './ProductDetailClient';
-import { createClient } from '@supabase/supabase-js';
+import { serverDb } from '@/lib/server-db';
+import { normalizePublicOrigin, toAbsolutePublicUrl } from '@/lib/site-url';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://www.affordableperfumesgh.com';
-const SITE_URL = (!siteUrl || siteUrl === 'https://example.com') ? 'https://www.affordableperfumesgh.com' : siteUrl;
+const SITE_URL = normalizePublicOrigin(process.env.NEXT_PUBLIC_APP_URL);
 
 async function getProduct(slug: string) {
-  const supabase = createClient(supabaseUrl, supabaseKey);
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
-  const query = supabase
+  const query = serverDb
     .from('products')
     .select('id, name, slug, description, short_description, price, compare_at_price, status, seo_title, seo_description, metadata, rating_avg, product_images(url, position), categories(name, slug)')
     .or('is_wholesale.is.null,is_wholesale.eq.false');
@@ -28,7 +25,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const product = await getProduct(slug);
   if (!product) return { title: 'Product Not Found' };
 
-  const baseUrl = SITE_URL.replace(/\/$/, '');
+  const baseUrl = SITE_URL;
   const title = product.seo_title || product.name;
   const description = (product.seo_description || product.short_description || product.description || `Buy ${product.name} - Quality product from Ghana.`)
     .replace(/<[^>]*>/g, '')
@@ -36,9 +33,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const images = (product.product_images as { url: string; position?: number }[] | null) || [];
   const sortedImages = [...images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const firstImage = sortedImages[0]?.url;
-  const ogImage = firstImage
-    ? (firstImage.startsWith('http') ? firstImage : `${baseUrl}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`)
-    : `${baseUrl}/og-default`;
+  const ogImage = firstImage ? toAbsolutePublicUrl(firstImage, baseUrl) : `${baseUrl}/og-default`;
   const productUrl = `${baseUrl}/product/${product.slug}`;
   const category = (product as any).categories?.name;
 
@@ -78,13 +73,11 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
   const product = await getProduct(slug);
   if (!product) notFound();
 
-  const baseUrl = SITE_URL.replace(/\/$/, '');
+  const baseUrl = SITE_URL;
   const images = (product.product_images as { url: string; position?: number }[] | null) || [];
   const sortedImages = [...images].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   const firstImage = sortedImages[0]?.url;
-  const productImage = firstImage
-    ? (firstImage.startsWith('http') ? firstImage : `${baseUrl}${firstImage.startsWith('/') ? '' : '/'}${firstImage}`)
-    : `${baseUrl}/og-default`;
+  const productImage = firstImage ? toAbsolutePublicUrl(firstImage, baseUrl) : `${baseUrl}/og-default`;
   const productUrl = `${baseUrl}/product/${product.slug}`;
   const category = (product as any).categories?.name;
 
@@ -93,7 +86,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     '@type': 'Product',
     name: product.name,
     description: (product.description || product.short_description || '').replace(/<[^>]*>/g, '').slice(0, 500),
-    image: sortedImages.map(img => img.url.startsWith('http') ? img.url : `${baseUrl}${img.url.startsWith('/') ? '' : '/'}${img.url}`),
+    image: sortedImages.map((img) => toAbsolutePublicUrl(img.url, baseUrl)),
     sku: product.id,
     url: productUrl,
     brand: {

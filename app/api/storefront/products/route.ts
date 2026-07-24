@@ -1,13 +1,8 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Server-side Supabase client (no auth needed for public data)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { serverDb } from '@/lib/server-db';
 
 // Simple in-memory cache
-let cache: { data: any; timestamp: number } | null = null;
+let cache: { data: Record<string, unknown>; timestamp: number } | null = null;
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes — products don't change frequently
 
 export async function GET(request: Request) {
@@ -16,10 +11,8 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const category = searchParams.get('category');
 
-    // Build a cache key from params
     const cacheKey = `${featured}-${limit}-${category || 'all'}`;
 
-    // Check cache (only for featured/home requests — general shop is more dynamic)
     if (featured && cache && cache.data?.[cacheKey] && Date.now() - cache.timestamp < CACHE_TTL) {
         return NextResponse.json(cache.data[cacheKey], {
             headers: {
@@ -30,7 +23,7 @@ export async function GET(request: Request) {
     }
 
     try {
-        let query = supabase
+        let query = serverDb
             .from('products')
             .select(`
                 id, name, slug, price, compare_at_price, quantity, description, metadata,
@@ -40,13 +33,11 @@ export async function GET(request: Request) {
             `)
             .order('created_at', { ascending: false });
 
-        // Always filter active, non-wholesale products
         query = query.eq('status', 'active').or('is_wholesale.is.null,is_wholesale.eq.false');
 
         if (featured) {
             query = query.eq('featured', true).limit(limit);
         } else if (category) {
-            // Filter by category slug or name
             query = query.limit(limit);
         } else {
             query = query.limit(limit);
@@ -59,7 +50,6 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
         }
 
-        // Cache the result
         if (!cache) cache = { data: {}, timestamp: Date.now() };
         cache.data[cacheKey] = data;
         cache.timestamp = Date.now();
@@ -70,8 +60,9 @@ export async function GET(request: Request) {
                 'X-Cache': 'MISS'
             }
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
         console.error('[Storefront API] Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

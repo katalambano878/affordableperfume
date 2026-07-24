@@ -1,19 +1,19 @@
 import { MetadataRoute } from 'next';
-import { supabase } from '@/lib/supabase';
+import { serverDb } from '@/lib/server-db';
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {
     let siteName = 'Affordable Perfumes GH';
     let siteDescription = 'Authentic perfumes delivered across Ghana.';
 
     try {
-        const { data: name } = await supabase
+        const { data: name } = await serverDb
             .from('site_settings')
             .select('value')
             .eq('key', 'site_name')
             .single();
         if (name?.value) siteName = name.value;
 
-        const { data: desc } = await supabase
+        const { data: desc } = await serverDb
             .from('site_settings')
             .select('value')
             .eq('key', 'site_description')

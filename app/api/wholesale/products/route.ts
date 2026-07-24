@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { supabaseAdmin } from '@/lib/supabase-admin';
 
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const category = searchParams.get('category');
 
-    // Verify the user is an approved wholesaler
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -18,17 +14,15 @@ export async function GET(request: Request) {
     const token = authHeader.replace('Bearer ', '');
 
     try {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-            auth: { autoRefreshToken: false, persistSession: false }
-        });
-
-        const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+        const {
+            data: { user },
+            error: authError,
+        } = await supabaseAdmin.auth.getUser(token);
         if (authError || !user) {
             return NextResponse.json({ error: 'Invalid session' }, { status: 401 });
         }
 
-        // Check wholesaler status
-        const { data: profile } = await supabase
+        const { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('is_wholesaler')
             .eq('id', user.id)
@@ -38,7 +32,7 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Not an approved wholesaler' }, { status: 403 });
         }
 
-        let query = supabase
+        let query = supabaseAdmin
             .from('products')
             .select(`
                 id, name, slug, price, wholesale_price, wholesale_moq, compare_at_price, quantity, description, metadata, moq,
@@ -65,8 +59,9 @@ export async function GET(request: Request) {
         return NextResponse.json(data, {
             headers: { 'Cache-Control': 'private, no-store' }
         });
-    } catch (err: any) {
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Unknown error';
         console.error('[Wholesale API] Error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return NextResponse.json({ error: message }, { status: 500 });
     }
 }

@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
+import { normalizePublicOrigin } from '@/lib/site-url';
 
 interface SiteSettings {
     site_name: string;
@@ -129,6 +130,9 @@ export function CMSProvider({ children }: { children: ReactNode }) {
                     // But let's be safe.
                     newSettings[item.key] = val;
                 });
+                if (newSettings.site_url) {
+                    newSettings.site_url = normalizePublicOrigin(newSettings.site_url);
+                }
                 setSettings(newSettings);
             }
 
