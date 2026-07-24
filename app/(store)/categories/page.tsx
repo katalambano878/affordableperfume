@@ -1,8 +1,10 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { serverDb } from '@/lib/server-db';
 import PageHero from '@/components/PageHero';
+import { resolveStorageUrl } from '@/lib/storage-url';
 
-export const revalidate = 0; // Ensure fresh data on every visit
+export const revalidate = 0;
 
 type CategoryRow = {
   id: string;
@@ -11,13 +13,6 @@ type CategoryRow = {
   description: string | null;
   image_url: string | null;
   position: number | null;
-};
-
-type CategoryCard = CategoryRow & {
-  image: string;
-  color: string;
-  icon: string;
-  productCount: string;
 };
 
 export default async function CategoriesPage() {
@@ -34,27 +29,7 @@ export default async function CategoriesPage() {
     .eq('status', 'active')
     .order('position', { ascending: true });
 
-  // Palette to cycle through for visual variety since DB doesn't have colors
-  const palette = [
-    { color: 'from-blue-500 to-blue-700', icon: 'ri-flask-line' },
-    { color: 'from-blue-500 to-blue-700', icon: 'ri-drop-line' },
-    { color: 'from-purple-500 to-purple-700', icon: 'ri-magic-line' },
-    { color: 'from-amber-500 to-amber-700', icon: 'ri-sparkling-line' },
-    { color: 'from-rose-500 to-rose-700', icon: 'ri-leaf-line' },
-    { color: 'from-indigo-500 to-indigo-700', icon: 'ri-award-line' },
-  ];
-
-  const categories: CategoryCard[] =
-    (categoriesData as CategoryRow[] | null)?.map((c, i) => {
-    const style = palette[i % palette.length];
-    return {
-      ...c,
-      image: c.image_url || 'https://via.placeholder.com/600x400?text=Category',
-      color: style.color,
-      icon: style.icon,
-      productCount: 'Browse',
-    };
-  }) || [];
+  const categories: CategoryRow[] = (categoriesData as CategoryRow[] | null) ?? [];
 
   return (
     <div className="min-h-screen bg-white">
@@ -63,71 +38,76 @@ export default async function CategoriesPage() {
         subtitle="Browse fragrances by scent family, notes, and signature style"
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 md:py-16">
         {categories.length > 0 ? (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {categories.map((category) => (
-              <Link
-                key={category.id}
-                href={`/shop?category=${category.slug}`}
-                className="group bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-2xl transition-all cursor-pointer"
-              >
-                <div className="relative h-48 overflow-hidden">
-                  <img
-                    src={category.image}
-                    alt={category.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                  />
-                  <div className={`absolute inset-0 bg-gradient-to-t ${category.color} opacity-0 group-hover:opacity-20 transition-opacity`}></div>
-                </div>
-                <div className="p-6">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={`w-12 h-12 bg-gradient-to-br ${category.color} rounded-full flex items-center justify-center`}>
-                      <i className={`${category.icon} text-2xl text-white`}></i>
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900">{category.name}</h3>
-                      <p className="text-sm text-gray-500">Collection</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 max-w-6xl mx-auto">
+            {categories.map((category) => {
+              const imageSrc =
+                resolveStorageUrl(category.image_url) ||
+                `https://via.placeholder.com/600x800?text=${encodeURIComponent(category.name)}`;
+
+              return (
+                <Link
+                  key={category.id}
+                  href={`/shop?category=${encodeURIComponent(category.slug)}`}
+                  className="group block relative w-full max-w-[220px] mx-auto"
+                >
+                  <div className="aspect-[4/5] sm:aspect-[5/6] rounded-xl overflow-hidden relative shadow-md group-hover:shadow-lg transition-all duration-300">
+                    <Image
+                      src={imageSrc}
+                      alt={category.name}
+                      fill
+                      className="object-cover transition-transform duration-700 group-hover:scale-110"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 220px"
+                      quality={65}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent opacity-70 group-hover:opacity-85 transition-opacity duration-300" />
+                    <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4">
+                      <h3 className="font-serif font-bold text-white text-sm sm:text-base md:text-lg leading-tight line-clamp-2">
+                        {category.name}
+                      </h3>
+                      {category.description ? (
+                        <p className="text-white/75 text-[11px] sm:text-xs mt-1 line-clamp-2 hidden sm:block">
+                          {category.description}
+                        </p>
+                      ) : null}
+                      <div className="flex items-center text-white/90 text-[10px] sm:text-xs font-medium mt-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                        <span className="uppercase tracking-wider">Shop Now</span>
+                        <i className="ri-arrow-right-line ml-1.5 transition-transform group-hover:translate-x-0.5" />
+                      </div>
                     </div>
                   </div>
-                  <p className="text-gray-600 leading-relaxed text-sm mb-4 line-clamp-2">
-                    {category.description || 'Explore our exclusive collection in this category.'}
-                  </p>
-                  <div className="flex items-center text-blue-700 font-medium text-sm group-hover:gap-2 transition-all">
-                    <span>Browse Collection</span>
-                    <i className="ri-arrow-right-line ml-2"></i>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-20 bg-gray-50 rounded-xl">
-            <i className="ri-inbox-line text-5xl text-gray-300 mb-4"></i>
+            <i className="ri-inbox-line text-5xl text-gray-300 mb-4" />
             <p className="text-xl text-gray-500">No categories found.</p>
           </div>
         )}
       </div>
 
-      <div className="bg-gradient-to-br from-blue-700 to-blue-900 py-16">
+      <div className="bg-gradient-to-br from-blue-700 to-blue-900 py-12 md:py-16">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl font-bold text-white mb-4">Can't Find What You're Looking For?</h2>
-          <p className="text-xl text-blue-100 mb-8 leading-relaxed">
+          <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">Can&apos;t Find What You&apos;re Looking For?</h2>
+          <p className="text-base md:text-lg text-blue-100 mb-8 leading-relaxed max-w-2xl mx-auto">
             Try our advanced search or contact our team for personalised product recommendations
           </p>
           <div className="flex flex-wrap gap-4 justify-center">
             <Link
               href="/shop"
-              className="inline-flex items-center gap-2 bg-white text-blue-700 px-8 py-4 rounded-full font-medium hover:bg-blue-50 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-2 bg-white text-blue-700 px-6 py-3 rounded-full font-medium hover:bg-blue-50 transition-colors whitespace-nowrap text-sm"
             >
-              <i className="ri-search-line"></i>
+              <i className="ri-search-line" />
               Search All Perfumes
             </Link>
             <Link
               href="/contact"
-              className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-4 rounded-full font-medium hover:bg-blue-500 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-full font-medium hover:bg-blue-500 transition-colors whitespace-nowrap text-sm"
             >
-              <i className="ri-customer-service-line"></i>
+              <i className="ri-customer-service-line" />
               Contact Support
             </Link>
           </div>

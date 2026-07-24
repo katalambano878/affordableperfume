@@ -52,20 +52,29 @@ export default function WholesalersPage() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (appsError) throw appsError;
-      setApplications(apps || []);
+      if (appsError) {
+        console.warn('Wholesale applications unavailable:', appsError.message);
+        setApplications([]);
+      } else {
+        setApplications(apps || []);
+      }
 
-      // Fetch approved wholesalers
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, email, full_name, phone, wholesale_approved_at')
         .eq('is_wholesaler', true)
         .order('wholesale_approved_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
-      setWholesalers(profiles || []);
+      if (profilesError) {
+        console.warn('Wholesale profiles query failed:', profilesError.message);
+        setWholesalers([]);
+      } else {
+        setWholesalers(profiles || []);
+      }
     } catch (err) {
       console.error('Error fetching wholesaler data:', err);
+      setApplications([]);
+      setWholesalers([]);
     } finally {
       setLoading(false);
     }

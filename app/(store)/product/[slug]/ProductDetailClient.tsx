@@ -368,6 +368,11 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <p className="text-sm text-blue-700 font-semibold mb-2">{product.category}</p>
+                    {product.metadata?.origin ? (
+                      <span className="inline-block text-[10px] uppercase tracking-[0.15em] text-gray-500 border border-gray-200 rounded-full px-2.5 py-0.5 mb-2 bg-gray-50">
+                        {product.metadata.origin}
+                      </span>
+                    ) : null}
                     <h1 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-3">{product.name}</h1>
                   </div>
                   <button
@@ -403,7 +408,24 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                   )}
                 </div>
 
-                <p className="text-gray-700 leading-relaxed mb-8 text-lg">{product.description}</p>
+                <p className="text-gray-700 leading-relaxed mb-6 text-lg">{product.description}</p>
+
+                {product.metadata?.scent_notes ? (
+                  <div className="mb-6 rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-blue-800 mb-1">Scent notes</p>
+                    <p className="text-sm text-blue-950/80 leading-relaxed">{product.metadata.scent_notes}</p>
+                  </div>
+                ) : null}
+
+                {product.preorderShipping ? (
+                  <div className="mb-8 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900">
+                    <i className="ri-time-line text-lg mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold">Pre-order / estimated shipping</p>
+                      <p className="text-sm text-amber-800/90">{product.preorderShipping}</p>
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* Color Selector */}
                 {hasVariants && product.colors.length > 0 && (

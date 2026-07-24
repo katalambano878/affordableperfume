@@ -9,7 +9,7 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 
 export default function WishlistPage() {
   usePageTitle('Wishlist');
-  const { wishlist: wishlistItems, removeFromWishlist } = useWishlist();
+  const { wishlist: wishlistItems } = useWishlist();
   const { addToCart } = useCart();
 
   const addAllToCart = () => {
@@ -55,7 +55,7 @@ export default function WishlistPage() {
 
   return (
     <main className="min-h-screen bg-gray-50">
-      <PageHero title="My Wishlist" />
+      <PageHero title="My Wishlist" image="perfumes" />
 
       <section className="py-8 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
@@ -98,17 +98,9 @@ export default function WishlistPage() {
       ) : (
         <section className="py-12">
           <div className="max-w-7xl mx-auto px-4 sm:px-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-6 md:gap-8">
               {wishlistItems.map((product) => (
-                <div key={product.id} className="relative">
-                  <ProductCard {...product} slug={product.slug || product.id} />
-                  <button
-                    onClick={() => removeFromWishlist(product.id)}
-                    className="absolute top-3 right-3 w-10 h-10 flex items-center justify-center bg-white rounded-full shadow-md hover:bg-red-50 transition-colors z-10"
-                  >
-                    <i className="ri-close-line text-gray-700 text-xl"></i>
-                  </button>
-                </div>
+                <ProductCard key={product.id} {...product} slug={product.slug || product.id} />
               ))}
             </div>
           </div>

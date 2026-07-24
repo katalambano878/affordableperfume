@@ -116,7 +116,6 @@ export default function SignupPage() {
       if (error) throw error;
 
       if (data.user) {
-        // Send Welcome Notification
         fetch('/api/notifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -128,14 +127,20 @@ export default function SignupPage() {
             }
           })
         }).catch(err => console.error('Welcome notification error:', err));
-        // If Supabase confirms via email, data.session might be null initially
-        if (!data.session) {
-          setSuccess(true);
-        } else {
-          redirectAfterAuth(redirectTo);
-          return;
-        }
       }
+
+      // Plain Postgres auto-confirms email — session is returned immediately
+      if (data.session) {
+        redirectAfterAuth(redirectTo);
+        return;
+      }
+
+      if (data.user) {
+        redirectAfterAuth(redirectTo);
+        return;
+      }
+
+      setSuccess(true);
     } catch (err: any) {
       console.error('Signup error:', err);
       setAuthError(getFriendlyError(err.message || 'Failed to sign up. Please try again.'));

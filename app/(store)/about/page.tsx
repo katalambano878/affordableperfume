@@ -42,6 +42,7 @@ export default function AboutPage() {
       <PageHero
         title="More Than Just A Brand"
         subtitle="From Accra to your doorstep — authentic perfumes and fragrances at prices that make sense."
+        image="about"
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
@@ -103,22 +104,22 @@ export default function AboutPage() {
         )}
 
         {activeTab === 'mission' && (
-          <div className="grid md:grid-cols-2 gap-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="bg-blue-50 p-10 rounded-3xl border border-blue-100">
-              <div className="w-16 h-16 bg-blue-700 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                <i className="ri-store-2-line text-3xl text-white"></i>
+          <div className="grid md:grid-cols-2 gap-6 max-w-5xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-blue-50 p-6 sm:p-7 rounded-2xl border border-blue-100">
+              <div className="w-12 h-12 bg-blue-700 rounded-xl flex items-center justify-center mb-4 shadow-md">
+                <i className="ri-store-2-line text-2xl text-white"></i>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">Your Fragrance Destination</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Your Fragrance Destination</h3>
+              <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
                 From designer bestsellers to hidden gems, we aim to be your trusted perfume destination. Our catalogue keeps growing with new arrivals and authentic fragrance finds.
               </p>
             </div>
-            <div className="bg-amber-50 p-10 rounded-3xl border border-amber-100">
-              <div className="w-16 h-16 bg-amber-600 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                <i className="ri-hand-heart-line text-3xl text-white"></i>
+            <div className="bg-amber-50 p-6 sm:p-7 rounded-2xl border border-amber-100">
+              <div className="w-12 h-12 bg-amber-600 rounded-xl flex items-center justify-center mb-4 shadow-md">
+                <i className="ri-hand-heart-line text-2xl text-white"></i>
               </div>
-              <h3 className="text-3xl font-bold text-gray-900 mb-4">Empowering Resellers</h3>
-              <p className="text-gray-600 text-lg leading-relaxed">
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Empowering Resellers</h3>
+              <p className="text-gray-600 text-sm sm:text-base leading-relaxed">
                 We support small businesses and resellers with competitive bulk pricing. Many of our products are available at wholesale rates, helping entrepreneurs across Ghana grow their own ventures.
               </p>
             </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export default function ProductsPage() {
@@ -11,6 +11,8 @@ export default function ProductsPage() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all_active');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [stockFilter, setStockFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -47,7 +49,6 @@ export default function ProductsPage() {
         .select(`
           *,
           categories(name),
-          product_variants(count),
           product_images(url, position)
         `);
 
@@ -77,7 +78,6 @@ export default function ProductsPage() {
           image: p.product_images?.find((img: any) => img.position === 0)?.url
             || p.product_images?.[0]?.url
             || 'https://via.placeholder.com/300?text=No+Image',
-          variantsCount: p.product_variants?.[0]?.count || 0,
           stock: p.quantity,
           sales: 0, // Placeholder for now
           rating: p.rating_avg || 0
@@ -102,12 +102,40 @@ export default function ProductsPage() {
     }
   };
 
+  const filteredProducts = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    return products.filter((product) => {
+      const matchesSearch =
+        !term ||
+        product.name?.toLowerCase().includes(term) ||
+        product.sku?.toLowerCase().includes(term) ||
+        product.slug?.toLowerCase().includes(term) ||
+        product.category?.toLowerCase().includes(term);
+
+      const matchesCategory =
+        categoryFilter === 'all' || product.category === categoryFilter;
+
+      const threshold = product.metadata?.low_stock_threshold ?? 5;
+      const qty = Number(product.stock ?? product.quantity ?? 0);
+      const matchesStock =
+        stockFilter === 'all' ||
+        (stockFilter === 'in_stock' && qty > 0) ||
+        (stockFilter === 'low' && qty > 0 && qty <= threshold) ||
+        (stockFilter === 'out' && qty === 0);
+
+      return matchesSearch && matchesCategory && matchesStock;
+    });
+  }, [products, searchQuery, categoryFilter, stockFilter]);
+
+  const activeFilterCount =
+    (statusFilter !== 'all_active' ? 1 : 0) +
+    (categoryFilter !== 'all' ? 1 : 0) +
+    (stockFilter !== 'all' ? 1 : 0);
+
   const handleSelectAll = () => {
-    if (selectedProducts.length === products.length) {
-      setSelectedProducts([]);
-    } else {
-      setSelectedProducts(products.map(p => p.id));
-    }
+    const ids = filteredProducts.map((p) => p.id);
+    const allSelected = ids.length > 0 && ids.every((id) => selectedProducts.includes(id));
+    setSelectedProducts(allSelected ? [] : ids);
   };
 
   const handleSelectProduct = (productId: string) => {
@@ -150,13 +178,6 @@ export default function ProductsPage() {
       }
     }
   };
-
-  const filteredProducts = products.filter(product => {
-    const term = searchQuery.toLowerCase();
-    return product.name.toLowerCase().includes(term) ||
-      (product.sku && product.sku.toLowerCase().includes(term)) ||
-      (product.category && product.category.toLowerCase().includes(term));
-  });
 
   return (
     <div className="space-y-6">
@@ -203,7 +224,7 @@ export default function ProductsPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search products by name, SKU, or category..."
+                  placeholder="Search by name, SKU, slug, or category..."
                   className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 />
               </div>
@@ -212,10 +233,19 @@ export default function ProductsPage() {
             <div className="flex items-center space-x-3">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:border-gray-400 transition-colors font-medium whitespace-nowrap cursor-pointer"
+                className={`px-4 py-3 border-2 rounded-lg transition-colors font-medium whitespace-nowrap cursor-pointer ${
+                  showFilters || activeFilterCount > 0
+                    ? 'border-blue-600 bg-blue-50 text-blue-800'
+                    : 'border-gray-300 text-gray-700 hover:border-gray-400'
+                }`}
               >
                 <i className="ri-filter-line mr-2"></i>
                 Filters
+                {activeFilterCount > 0 ? (
+                  <span className="ml-2 inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 rounded-full bg-blue-700 text-white text-xs">
+                    {activeFilterCount}
+                  </span>
+                ) : null}
               </button>
               <select
                 value={sortBy}
@@ -248,22 +278,61 @@ export default function ProductsPage() {
           </div>
 
           {showFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg grid md:grid-cols-4 gap-4">
-              <select className="px-3 py-2 pr-8 border-2 border-gray-300 rounded-lg text-sm cursor-pointer">
-                <option value="">All Categories</option>
-                {categories.map((cat: any) => <option key={cat.name} value={cat.name}>{cat.name}</option>)}
-              </select>
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="px-3 py-2 pr-8 border-2 border-gray-300 rounded-lg text-sm cursor-pointer"
-              >
-                <option value="all_active">All Status (Default)</option>
-                <option value="active">Active Only</option>
-                <option value="draft">Drafts Only</option>
-                <option value="archived">Archived</option>
-                <option value="all">Show Everything</option>
-              </select>
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg grid sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Category</label>
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="w-full px-3 py-2 pr-8 border-2 border-gray-300 rounded-lg text-sm cursor-pointer"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map((cat: any) => (
+                    <option key={cat.name} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 pr-8 border-2 border-gray-300 rounded-lg text-sm cursor-pointer"
+                >
+                  <option value="all_active">Active + Drafts</option>
+                  <option value="active">Active Only</option>
+                  <option value="draft">Drafts Only</option>
+                  <option value="archived">Archived</option>
+                  <option value="all">Show Everything</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Stock</label>
+                <select
+                  value={stockFilter}
+                  onChange={(e) => setStockFilter(e.target.value)}
+                  className="w-full px-3 py-2 pr-8 border-2 border-gray-300 rounded-lg text-sm cursor-pointer"
+                >
+                  <option value="all">All Stock Levels</option>
+                  <option value="in_stock">In Stock</option>
+                  <option value="low">Low Stock</option>
+                  <option value="out">Out of Stock</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryFilter('all');
+                    setStatusFilter('all_active');
+                    setStockFilter('all');
+                    setSearchQuery('');
+                  }}
+                  className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-white cursor-pointer"
+                >
+                  Clear filters
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -303,7 +372,10 @@ export default function ProductsPage() {
                   <th className="py-4 px-6">
                     <input
                       type="checkbox"
-                      checked={selectedProducts.length === products.length && products.length > 0}
+                      checked={
+                        filteredProducts.length > 0 &&
+                        filteredProducts.every((p) => selectedProducts.includes(p.id))
+                      }
                       onChange={handleSelectAll}
                       className="w-4 h-4 text-blue-700 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
                     />

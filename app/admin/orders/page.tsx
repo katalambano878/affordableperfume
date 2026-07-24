@@ -87,7 +87,8 @@ export default function AdminOrdersPage() {
             product_name
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(500);
 
       if (error) throw error;
 
@@ -286,9 +287,19 @@ export default function AdminOrdersPage() {
   const handleResendPaymentLink = async (order: Order) => {
     setSendingPaymentLink(order.id);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        alert('Your session expired. Please sign in again.');
+        return;
+      }
+
       const response = await fetch('/api/notifications', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
           type: 'payment_link',
           payload: order

@@ -61,16 +61,63 @@ export default function AdminCategoriesPage() {
   };
 
   const handleDelete = async (categoryId: string) => {
-    if (confirm('Are you sure you want to delete this category? This action cannot be undone.')) {
-      try {
-        const { error } = await supabase.from('categories').delete().eq('id', categoryId);
-        if (error) throw error;
-        setCategories(categories.filter(c => c.id !== categoryId));
-        alert('Category deleted successfully');
-      } catch (err: any) {
-        alert('Error deleting: ' + err.message);
+    const category = categories.find((c) => c.id === categoryId);
+    const childCount = categories.filter((c) => c.parent_id === categoryId).length;
+
+    const confirmMessage =
+      `Delete "${category?.name || 'this category'}"?\n\n` +
+      (childCount > 0
+        ? `${childCount} subcategor${childCount === 1 ? 'y' : 'ies'} will become top-level (no parent).\n`
+        : '') +
+      'Products assigned to this category will become uncategorized.\n\nThis cannot be undone.';
+
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        alert('Your session expired. Please sign in to the admin again.');
+        return;
       }
+
+      const res = await fetch(`/api/admin/categories/${categoryId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to delete category');
+      }
+
+      setCategories(categories.filter((c) => c.id !== categoryId));
+      const parts = ['Category deleted successfully.'];
+      if (payload.productsUncategorized > 0) {
+        parts.push(`${payload.productsUncategorized} product(s) are now uncategorized.`);
+      }
+      if (payload.subcategoriesOrphaned > 0) {
+        parts.push(`${payload.subcategoriesOrphaned} subcategor${payload.subcategoriesOrphaned === 1 ? 'y is' : 'ies are'} now top-level.`);
+      }
+      alert(parts.join(' '));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      alert(formatCategoryDeleteError(message));
     }
+  };
+
+  const formatCategoryDeleteError = (message: string): string => {
+    const lower = message.toLowerCase();
+    if (lower.includes('foreign key') || lower.includes('violates')) {
+      return 'This category could not be deleted because it is still linked to products or subcategories. Save your work and try again, or set the category to Inactive instead.';
+    }
+    if (lower.includes('admin access') || lower.includes('unauthorized')) {
+      return 'You must be signed in as admin or staff to delete categories.';
+    }
+    return `Error deleting category: ${message}`;
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

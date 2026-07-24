@@ -1,19 +1,21 @@
 import Link from 'next/link';
+import PageHero from '@/components/PageHero';
 
 export default function ShippingPage() {
   const deliveryOptions = [
     {
-      type: 'Standard Delivery',
+      type: 'Delivery range (20-50 GHS) nationwide',
       time: '24 - 48 Hours',
-      cost: 'GHS 20',
+      cost: '',
       description: 'Reliable delivery to your doorstep across Ghana',
       icon: 'ri-truck-line'
     },
     {
       type: 'Express Delivery',
-      time: 'Within 24 Hours',
-      cost: 'GHS 40',
-      description: 'Priority handling for Accra & Kumasi orders',
+      time: '',
+      cost: '',
+      description:
+        'For same-day express delivery, kindly arrange a rider through Yango, Uber, or Bolt Delivery.',
       icon: 'ri-rocket-line'
     },
     {
@@ -25,39 +27,16 @@ export default function ShippingPage() {
     }
   ];
 
-  const zones = [
-    {
-      zone: 'Zone 1 - Accra & Kumasi',
-      areas: 'All locations within Accra Metro and Kumasi City',
-      standard: '24 hours',
-      express: 'Same day'
-    },
-    {
-      zone: 'Zone 2 - Regional Capitals',
-      areas: 'Takoradi, Cape Coast, Tamale, Sunyani, Ho, Koforidua',
-      standard: '24 - 48 hours',
-      express: '24 hours'
-    },
-    {
-      zone: 'Zone 3 - Other Areas',
-      areas: 'All other districts and towns across Ghana',
-      standard: '48 hours',
-      express: 'Not available'
-    }
-  ];
+  const expressDeliveryNote =
+    'For same-day express delivery, kindly arrange a rider through Yango, Uber, or Bolt Delivery.';
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="bg-gradient-to-br from-blue-50 via-white to-amber-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl font-bold text-gray-900 mb-6">Shipping & Delivery</h1>
-            <p className="text-xl text-gray-600 leading-relaxed">
-              Fast, reliable delivery across Ghana. Free standard shipping on orders over GHS 300.
-            </p>
-          </div>
-        </div>
-      </div>
+      <PageHero
+        title="Shipping & Delivery"
+        subtitle="Nationwide delivery in 24–48 hrs (GHS 20–50). Free standard shipping on orders over GHS 300."
+        image="shipping"
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="mb-16">
@@ -69,8 +48,12 @@ export default function ShippingPage() {
                   <i className={`${option.icon} text-2xl text-blue-700`}></i>
                 </div>
                 <h3 className="text-2xl font-bold text-gray-900 mb-2">{option.type}</h3>
-                <div className="text-blue-700 font-bold text-xl mb-2">{option.cost}</div>
-                <div className="text-gray-600 font-medium mb-4">{option.time}</div>
+                {option.cost ? (
+                  <div className="text-blue-700 font-bold text-xl mb-2">{option.cost}</div>
+                ) : null}
+                {option.time ? (
+                  <div className="text-gray-600 font-medium mb-4">{option.time}</div>
+                ) : null}
                 <p className="text-gray-600 leading-relaxed">{option.description}</p>
               </div>
             ))}
@@ -88,29 +71,17 @@ export default function ShippingPage() {
         </div>
 
         <div className="mb-16">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Delivery Zones & Timeframes</h2>
-          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Zone</th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Areas Covered</th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Standard</th>
-                    <th className="px-6 py-4 text-left text-sm font-bold text-gray-900">Express</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {zones.map((zone, index) => (
-                    <tr key={index} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">{zone.zone}</td>
-                      <td className="px-6 py-4 text-gray-600 text-sm">{zone.areas}</td>
-                      <td className="px-6 py-4 text-gray-900">{zone.standard}</td>
-                      <td className="px-6 py-4 text-gray-900">{zone.express}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <h2 className="text-3xl font-bold text-gray-900 mb-8">Delivery Timeframes</h2>
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden divide-y divide-gray-200">
+            <div className="p-8">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Standard delivery</h3>
+              <p className="text-gray-600 leading-relaxed">
+                Delivery takes 24–48 hrs nationwide.
+              </p>
+            </div>
+            <div className="p-8">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Express delivery</h3>
+              <p className="text-gray-600 leading-relaxed">{expressDeliveryNote}</p>
             </div>
           </div>
         </div>
@@ -126,7 +97,8 @@ export default function ShippingPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Order Processing</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    Orders placed before 2pm are processed same day. We carefully pack your items and prepare them for dispatch.
+                    We confirm your order, carefully pack your items, and prepare them for dispatch. Standard
+                    delivery takes 24–48 hrs nationwide (delivery fee typically GHS 20–50 depending on location).
                   </p>
                 </div>
               </div>
@@ -138,7 +110,8 @@ export default function ShippingPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Dispatch</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    Your order is handed to our trusted delivery partner. You'll receive a tracking number via email and SMS.
+                    Your order is handed to our trusted delivery partner. You&apos;ll receive your order details and
+                    tracking information via email and SMS once it&apos;s on the way.
                   </p>
                 </div>
               </div>
@@ -150,7 +123,11 @@ export default function ShippingPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Track Your Order</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    Use your tracking number to monitor your delivery in real-time. You'll get updates at each stage.
+                    Use your order number and email on our{' '}
+                    <Link href="/order-tracking" className="text-blue-700 font-medium hover:underline">
+                      Order Tracking
+                    </Link>{' '}
+                    page to see status updates at each stage.
                   </p>
                 </div>
               </div>
@@ -162,7 +139,11 @@ export default function ShippingPage() {
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2">Delivery</h3>
                   <p className="text-gray-600 leading-relaxed">
-                    Our delivery partner will contact you before arrival. Sign for your package and enjoy your purchase!
+                    Delivery takes 24–48 hrs nationwide. Our partner may contact you before arrival—please keep your
+                    phone reachable. Sign for your package and enjoy your purchase!
+                  </p>
+                  <p className="text-gray-600 leading-relaxed mt-3 text-sm">
+                    <span className="font-semibold text-gray-900">Need it today?</span> {expressDeliveryNote}
                   </p>
                 </div>
               </div>
@@ -174,21 +155,11 @@ export default function ShippingPage() {
             <div className="bg-gray-50 rounded-2xl p-6 space-y-6">
               <div>
                 <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <i className="ri-time-line text-blue-700"></i>
-                  Cut-off Times
-                </h3>
-                <p className="text-gray-600 leading-relaxed text-sm">
-                  Orders placed before 2pm are dispatched same day. Orders after 2pm are dispatched next business day.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
                   <i className="ri-calendar-line text-blue-700"></i>
                   Business Days
                 </h3>
                 <p className="text-gray-600 leading-relaxed text-sm">
-                  Delivery timeframes exclude weekends and public holidays. We process orders Monday to Friday.
+                  Mon–Friday, 9:00am to 5:00pm
                 </p>
               </div>
 
@@ -199,26 +170,6 @@ export default function ShippingPage() {
                 </h3>
                 <p className="text-gray-600 leading-relaxed text-sm">
                   Our delivery partner will call you before arrival. Please ensure your phone number is correct and reachable.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <i className="ri-home-line text-blue-700"></i>
-                  Failed Deliveries
-                </h3>
-                <p className="text-gray-600 leading-relaxed text-sm">
-                  If you're unavailable, we'll attempt delivery twice. After that, the package is held at a collection point for 5 days.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="font-bold text-gray-900 mb-2 flex items-center gap-2">
-                  <i className="ri-secure-payment-line text-blue-700"></i>
-                  Package Security
-                </h3>
-                <p className="text-gray-600 leading-relaxed text-sm">
-                  All packages are insured during transit. Report any damage or missing items within 48 hours of delivery.
                 </p>
               </div>
             </div>

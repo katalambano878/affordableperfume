@@ -220,7 +220,7 @@ export default function InventoryManagementPage() {
                   >
                     {filter === 'all' && 'All'}
                     {filter === 'low' && 'Low Stock'}
-                    {filter === 'out' && 'Out (0)'}
+                    {filter === 'out' && `Out (${outOfStockCount})`}
                     {filter === 'good' && 'In Stock'}
                   </button>
                 ))}
@@ -235,7 +235,8 @@ export default function InventoryManagementPage() {
               </button>
 
               <button
-                onClick={() => setShowExportModal(true)}
+                type="button"
+                onClick={handleExportCSV}
                 className="border-2 border-gray-300 hover:border-gray-400 text-gray-700 px-4 py-3 rounded-lg font-semibold transition-colors flex items-center space-x-2 whitespace-nowrap cursor-pointer"
               >
                 <i className="ri-download-line"></i>

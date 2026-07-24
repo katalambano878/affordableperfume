@@ -1,6 +1,7 @@
 'use client';
 
 import { useCMS } from '@/context/CMSContext';
+import PageHero from '@/components/PageHero';
 
 export default function TermsPage() {
   const { getSetting } = useCMS();
@@ -9,17 +10,14 @@ export default function TermsPage() {
   const contactPhone = getSetting('contact_phone') || '';
   return (
     <div className="min-h-screen bg-white">
-      <div className="bg-gradient-to-br from-blue-50 via-white to-amber-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-5xl font-bold text-gray-900 mb-6">Terms & Conditions</h1>
-            <p className="text-xl text-gray-600 leading-relaxed">
-              Please read these terms carefully before using our website and services.
-            </p>
-            <p className="text-sm text-gray-500 mt-4">Last updated: February 2026</p>
-          </div>
-        </div>
-      </div>
+      <PageHero
+        title="Terms & Conditions"
+        subtitle="Please read these terms carefully before using our website and services."
+        image="support"
+        afterSubtitle={
+          <p className="text-sm text-blue-100/90 mt-4">Last updated: February 2026</p>
+        }
+      />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="prose prose-lg max-w-none">

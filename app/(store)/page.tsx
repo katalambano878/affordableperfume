@@ -26,7 +26,7 @@ export default function Home() {
   const [currentSlide, setCurrentSlide] = useState(0);
   const defaultHeroSlides = [
     {
-      image: '/hero-areej.png',
+      image: '/hero-areej.webp',
       tag: 'Luxury Fragrances',
       heading: 'Areej Perfumes',
       subtext: 'Luxurious scents you can afford. Premium perfumes at unbeatable prices, delivered across Ghana.',
@@ -34,7 +34,7 @@ export default function Home() {
       cta2: { text: 'View All', href: '/shop' }
     },
     {
-      image: '/hero-armaf.png',
+      image: '/hero-armaf.webp',
       tag: 'Designer Perfumes',
       heading: 'Club de Nuit Intense Man',
       subtext: 'Discover Armaf and more designer fragrances. Authentic perfumes, nationwide delivery.',
@@ -206,13 +206,13 @@ export default function Home() {
               ) : (
                 <div className={`absolute inset-0 w-full h-full transform transition-transform duration-[8000ms] ease-out ${index === currentSlide ? 'scale-110' : 'scale-100'}`}>
                   <Image
-                    src={slide.image || '/hero-areej.png'}
+                    src={slide.image || '/hero-areej.webp'}
                     alt={`Hero Banner ${index + 1}`}
                     fill
                     className="object-cover"
                     priority={index === 0}
-                    quality={100}
-                    unoptimized
+                    quality={72}
+                    sizes="100vw"
                   />
                 </div>
               )}
@@ -283,8 +283,8 @@ export default function Home() {
                   fill
                   className="object-cover"
                   priority={index === 0}
-                  quality={100}
-                  unoptimized
+                  quality={72}
+                  sizes="100vw"
                 />
               </div>
               <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/50 to-transparent z-[5]"></div>
@@ -351,10 +351,10 @@ export default function Home() {
             </Link>
           </AnimatedSection>
 
-          <AnimatedGrid className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+          <AnimatedGrid className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4 max-w-5xl lg:max-w-6xl mx-auto">
             {categories.map((category) => (
-              <Link href={`/shop?category=${category.slug}`} key={category.id} className="group cursor-pointer block relative">
-                <div className="aspect-[3/4] rounded-2xl overflow-hidden relative shadow-md group-hover:shadow-xl transition-all duration-300">
+              <Link href={`/shop?category=${encodeURIComponent(category.slug)}`} key={category.id} className="group cursor-pointer block relative">
+                <div className="aspect-[4/5] sm:aspect-[5/6] rounded-xl overflow-hidden relative shadow-md group-hover:shadow-lg transition-all duration-300">
                   <Image
                     src={category.image || category.image_url || 'https://via.placeholder.com/600x800?text=' + encodeURIComponent(category.name)}
                     alt={category.name}
@@ -367,8 +367,8 @@ export default function Home() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-80 transition-opacity duration-300"></div>
 
                   {/* Content */}
-                  <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col justify-end h-full">
-                    <h3 className="font-serif font-bold text-white text-xl md:text-2xl mb-1 transform translate-y-4 group-hover:translate-y-0 transition-transform duration-300">{category.name}</h3>
+                  <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 flex flex-col justify-end h-full">
+                    <h3 className="font-serif font-bold text-white text-base sm:text-lg md:text-xl mb-0.5 transform translate-y-2 group-hover:translate-y-0 transition-transform duration-300">{category.name}</h3>
                     <div className="flex items-center text-white/90 text-sm font-medium opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-4 group-hover:translate-y-0 delay-75">
                       <span className="uppercase tracking-wider text-xs">Shop Now</span>
                       <i className="ri-arrow-right-line ml-2 transition-transform group-hover:translate-x-1"></i>
@@ -396,13 +396,13 @@ export default function Home() {
           </AnimatedSection>
 
           {loading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-4 gap-y-8 md:gap-8">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-5xl mx-auto">
               {[...Array(4)].map((_, i) => (
                 <ProductCardSkeleton key={i} />
               ))}
             </div>
           ) : (
-            <AnimatedGrid className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 lg:gap-8">
+            <AnimatedGrid className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 max-w-5xl mx-auto">
               {featuredProducts.map((product) => {
                 const variants = product.product_variants || [];
                 const hasVariants = variants.length > 0;

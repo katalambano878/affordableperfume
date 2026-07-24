@@ -93,6 +93,10 @@ export default function AdminLayout({
       }
     });
 
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (mounted) handleSession(session);
+    });
+
     return () => {
       mounted = false;
       subscription.unsubscribe();

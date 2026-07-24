@@ -67,17 +67,21 @@ export default function POSPage() {
     const fetchData = async () => {
         try {
             setLoading(true);
-            // Fetch Products
-            const { data: prodData } = await supabase
+            const { data: prodData, error: prodError } = await supabase
                 .from('products')
                 .select(`
           id, name, price, quantity, sku,
           categories(name),
           product_images(url)
         `)
-                .order('name');
+                .eq('status', 'active')
+                .order('name')
+                .limit(300);
 
-            if (prodData) {
+            if (prodError) {
+                console.error('POS products error:', prodError);
+                setProducts([]);
+            } else if (prodData) {
                 const formatted: Product[] = prodData.map((p: any) => ({
                     id: p.id,
                     name: p.name,
@@ -94,17 +98,19 @@ export default function POSPage() {
                 setCategories(['All', ...cats]);
             }
 
-            // Fetch Customers from customers table (not profiles)
-            const { data: custData } = await supabase
+            const { data: custData, error: custError } = await supabase
                 .from('customers')
                 .select('id, full_name, email, phone')
                 .order('full_name')
                 .limit(200);
 
-            if (custData) setCustomers(custData);
+            if (custError) {
+                console.warn('POS customers error:', custError);
+            } else if (custData) setCustomers(custData);
 
         } catch (error) {
             console.error('Error fetching POS data:', error);
+            setProducts([]);
         } finally {
             setLoading(false);
         }

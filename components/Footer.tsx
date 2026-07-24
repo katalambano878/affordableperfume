@@ -11,12 +11,12 @@ function FooterSection({ title, children }: { title: string, children: React.Rea
     <div className="border-b border-white/5 lg:border-none last:border-0 overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between py-5 text-left lg:py-0 lg:cursor-default lg:mb-8 group"
+        className="w-full flex items-center justify-between py-4 text-left lg:py-0 lg:cursor-default lg:mb-5 group"
       >
-        <h4 className="font-serif text-xl font-bold text-white group-hover:text-blue-400 transition-colors duration-300">{title}</h4>
+        <h4 className="font-serif text-lg font-bold text-white group-hover:text-blue-400 transition-colors duration-300">{title}</h4>
         <i className={`ri-arrow-down-s-line text-gray-500 text-xl transition-transform duration-500 lg:hidden ${isOpen ? 'rotate-180 text-blue-400' : ''}`}></i>
       </button>
-      <div className={`transition-all duration-500 ease-in-out ${isOpen ? 'max-h-96 pb-8' : 'max-h-0 lg:max-h-full lg:overflow-visible'}`}>
+      <div className={`transition-all duration-500 ease-in-out ${isOpen ? 'max-h-96 pb-5' : 'max-h-0 lg:max-h-full lg:overflow-visible'}`}>
         {children}
       </div>
     </div>
@@ -46,7 +46,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="relative mt-24 z-0 bg-[#050505]">
+    <footer className="relative mt-16 z-0 bg-[#050505]">
 
       {/* Mesh Gradient Background */}
       <div className="absolute inset-0 overflow-hidden opacity-20 pointer-events-none">
@@ -54,23 +54,23 @@ export default function Footer() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[30%] h-[30%] bg-purple-900 rounded-full blur-[100px]"></div>
       </div>
 
-      <div className="relative text-white border-t border-white/5 pt-20 pb-12">
+      <div className="relative text-white border-t border-white/5 pt-12 pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
 
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-8 border-b border-white/5 pb-16">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-6 border-b border-white/5 pb-10">
 
             {/* Brand Information */}
-            <div className="lg:col-span-4 space-y-8">
+            <div className="lg:col-span-4 space-y-5">
               <Link href="/" className="inline-block group transition-transform duration-500 hover:scale-105">
                 {siteLogo ? (
-                  <img src={siteLogo} alt={siteName} className="h-16 w-auto object-contain drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]" />
+                  <img src={siteLogo} alt={siteName} className="h-12 w-auto object-contain drop-shadow-[0_0_15px_rgba(37,99,235,0.3)]" />
                 ) : (
                   <span className="text-3xl font-serif font-bold text-white tracking-tight">{siteName}</span>
                 )}
               </Link>
-              <div className="space-y-4">
-                <p className="text-gray-400/80 leading-relaxed text-base max-w-sm">
+              <div className="space-y-3">
+                <p className="text-gray-400/80 leading-relaxed text-sm max-w-sm">
                   Curating authentic premium scents and fragrances. Excellence delivered across Ghana.
                 </p>
                 <div className="space-y-2">
@@ -86,7 +86,7 @@ export default function Footer() {
               </div>
 
               {/* Social Grid */}
-              <div className="flex flex-wrap gap-4 pt-4">
+              <div className="flex flex-wrap gap-3 pt-1">
                 {[
                   { link: socialInstagram, icon: 'ri-instagram-line', label: 'Instagram' },
                   { link: socialTiktok, icon: 'ri-tiktok-fill', label: 'TikTok' },
@@ -101,7 +101,7 @@ export default function Footer() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={social.label}
-                    className="w-11 h-11 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white hover:border-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all transform hover:-translate-y-1.5 duration-300"
+                    className="w-10 h-10 bg-white/5 border border-white/10 rounded-xl flex items-center justify-center text-gray-400 hover:bg-blue-600 hover:text-white hover:border-blue-500 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] transition-all transform hover:-translate-y-1.5 duration-300"
                   >
                     <i className={`${social.icon} text-lg`}></i>
                   </a>
@@ -110,18 +110,19 @@ export default function Footer() {
             </div>
 
             {/* Navigation Sections */}
-            <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-8 md:pl-12">
+            <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-3 gap-6 md:pl-8">
               <FooterSection title="Collection">
-                <ul className="space-y-4 text-gray-400 text-sm">
+                <ul className="space-y-2.5 text-gray-400 text-sm">
+                  <li><Link href="/shop" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Shop</Link></li>
                   <li><Link href="/shop" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">All Masterpieces</Link></li>
-                  <li><Link href="/shop?category=perfumes" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Signature Scent</Link></li>
+                  <li><Link href="/categories" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Signature Scent</Link></li>
                   <li><Link href="/shop?sort=new" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">New arrivals</Link></li>
                   <li><Link href="/shop?featured=true" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Limited Editions</Link></li>
                 </ul>
               </FooterSection>
 
               <FooterSection title="Assistance">
-                <ul className="space-y-4 text-gray-400 text-sm">
+                <ul className="space-y-2.5 text-gray-400 text-sm">
                   <li><Link href="/contact" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Concierge Service</Link></li>
                   <li><Link href="/order-tracking" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Track Parcel</Link></li>
                   <li><Link href="/shipping" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Shipping Policy</Link></li>
@@ -130,23 +131,29 @@ export default function Footer() {
               </FooterSection>
 
               <FooterSection title="Universe">
-                <ul className="space-y-4 text-gray-400 text-sm">
+                <ul className="space-y-2.5 text-gray-400 text-sm">
                   <li><Link href="/about" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Philosophy</Link></li>
                   <li><Link href="/privacy" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Privacy & Data</Link></li>
                   <li><Link href="/terms" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Terms of Service</Link></li>
-                  <li><Link href="/admin" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300 font-medium">Internal Portal</Link></li>
                 </ul>
               </FooterSection>
             </div>
           </div>
 
           {/* Bottom Bar */}
-          <div className="pt-12 flex flex-col md:flex-row justify-between items-center gap-8">
+          <div className="pt-8 flex flex-col md:flex-row justify-between items-center gap-5">
             <div className="text-gray-500 text-xs font-medium tracking-wide">
-              &copy; {new Date().getFullYear()} {siteName.toUpperCase()} — CRAFTED IN GHANA.
+              <Link
+                href="/admin/login"
+                className="hover:text-gray-400 transition-colors"
+                aria-label="Admin sign in"
+              >
+                &copy;
+              </Link>{' '}
+              {new Date().getFullYear()} {siteName.toUpperCase()} — CRAFTED IN GHANA.
             </div>
 
-            <div className="flex items-center gap-8">
+            <div className="flex items-center gap-6">
               {/* Payment Partners */}
               <div className="flex gap-4 items-center opacity-30 grayscale hover:opacity-100 hover:grayscale-0 transition-all duration-500">
                 <i className="ri-visa-line text-2xl"></i>

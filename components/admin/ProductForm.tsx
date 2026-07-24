@@ -1,19 +1,32 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { useCMS } from '@/context/CMSContext';
+import { normalizePublicOrigin } from '@/lib/site-url';
+import { buildProductSeo, slugifyProduct, stripHtml } from '@/lib/product-seo';
 
 interface ProductFormProps {
     initialData?: any;
     isEditMode?: boolean;
 }
 
+function slugify(value: string): string {
+    return slugifyProduct(value);
+}
+
 export default function ProductForm({ initialData, isEditMode = false }: ProductFormProps) {
     const router = useRouter();
+    const { getSetting } = useCMS();
     const [loading, setLoading] = useState(false);
     const [categories, setCategories] = useState<any[]>([]);
+    const siteOrigin = useMemo(
+        () => normalizePublicOrigin(getSetting('site_url') || process.env.NEXT_PUBLIC_APP_URL),
+        [getSetting]
+    );
+    const siteHost = siteOrigin.replace(/^https?:\/\//, '');
 
     const [productName, setProductName] = useState(initialData?.name || '');
     const [categoryId, setCategoryId] = useState(initialData?.category_id || '');
@@ -26,11 +39,20 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
     const [description, setDescription] = useState(initialData?.description || '');
     const [scentNotes, setScentNotes] = useState(initialData?.metadata?.scent_notes || '');
     const [productOrigin, setProductOrigin] = useState(initialData?.metadata?.origin || '');
-    const [status, setStatus] = useState(initialData?.status || 'Active');
-    const [featured, setFeatured] = useState(initialData?.featured || false);
-    const [isWholesale, setIsWholesale] = useState(initialData?.is_wholesale || false);
-    const [wholesalePrice, setWholesalePrice] = useState(initialData?.wholesale_price || '');
-    const [wholesaleMoq, setWholesaleMoq] = useState(initialData?.wholesale_moq || '');
+    const [status, setStatus] = useState(() => {
+        const s = String(initialData?.status || 'active').toLowerCase();
+        if (s === 'draft') return 'Draft';
+        if (s === 'archived') return 'Archived';
+        return 'Active';
+    });
+    const [featured, setFeatured] = useState(!!initialData?.featured);
+    const [isWholesale, setIsWholesale] = useState(!!initialData?.is_wholesale);
+    const [wholesalePrice, setWholesalePrice] = useState(
+        initialData?.wholesale_price != null ? String(initialData.wholesale_price) : ''
+    );
+    const [wholesaleMoq, setWholesaleMoq] = useState(
+        initialData?.wholesale_moq != null ? String(initialData.wholesale_moq) : ''
+    );
     const [preorderShipping, setPreorderShipping] = useState(initialData?.metadata?.preorder_shipping || '');
     const [activeTab, setActiveTab] = useState('general');
 
@@ -201,8 +223,13 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
     const [seoTitle, setSeoTitle] = useState(initialData?.seo_title || '');
     const [metaDescription, setMetaDescription] = useState(initialData?.seo_description || '');
     const [urlSlug, setUrlSlug] = useState(initialData?.slug || '');
-    const [slugEdited, setSlugEdited] = useState(false);
+    const [slugEdited, setSlugEdited] = useState(!!initialData?.slug);
     const [keywords, setKeywords] = useState(initialData?.tags?.join(', ') || '');
+    const [focusKeyword, setFocusKeyword] = useState(initialData?.metadata?.seo_focus_keyword || '');
+    const [allowIndex, setAllowIndex] = useState(initialData?.metadata?.seo_noindex !== true);
+    const [seoEdited, setSeoEdited] = useState(
+        !!(initialData?.seo_title || initialData?.seo_description || initialData?.metadata?.seo_focus_keyword)
+    );
 
     const tabs = [
         { id: 'general', label: 'General', icon: 'ri-information-line' },
@@ -229,10 +256,27 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
     // Auto-generate slug from the full name as it's typed,
     // until the user manually edits the slug field.
     useEffect(() => {
-        if (!isEditMode && !slugEdited) {
-            setUrlSlug(productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''));
+        if (!slugEdited) {
+            setUrlSlug(slugify(productName));
         }
-    }, [productName, isEditMode, slugEdited]);
+    }, [productName, slugEdited]);
+
+    // Auto-fill SEO while creating a product (or until the admin edits SEO fields).
+    useEffect(() => {
+        if (seoEdited || !productName.trim()) return;
+        const categoryName = categories.find((c) => c.id === categoryId)?.name || '';
+        const seo = buildProductSeo({
+            name: productName,
+            description,
+            categoryName,
+            siteName: getSetting('site_name') || 'Affordable Perfumes GH',
+            scentNotes,
+        });
+        setSeoTitle(seo.seo_title);
+        setMetaDescription(seo.seo_description);
+        setFocusKeyword(seo.focus_keyword);
+        setKeywords(seo.tags.join(', '));
+    }, [productName, description, categoryId, scentNotes, categories, seoEdited, getSetting]);
 
     // Auto-generate SKU for new products
     useEffect(() => {
@@ -280,15 +324,57 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
         try {
             setLoading(true);
 
+            if (!productName.trim()) {
+                alert('Product name is required.');
+                setLoading(false);
+                return;
+            }
+            if (isWholesale && (!wholesalePrice || parseFloat(wholesalePrice) <= 0)) {
+                alert('Wholesale products need a wholesale price greater than 0.');
+                setActiveTab('general');
+                setLoading(false);
+                return;
+            }
+
             // If product has variants, auto-sync main stock = sum of variant stocks
             const hasVariants = variants.length > 0;
             const variantStockTotal = hasVariants
                 ? variants.reduce((sum, v) => sum + (parseInt(v.stock) || 0), 0)
                 : parseInt(stock) || 0;
 
+            const existingMeta =
+                initialData?.metadata && typeof initialData.metadata === 'object'
+                    ? { ...initialData.metadata }
+                    : {};
+
+            const cleanSlug = slugify(urlSlug || productName);
+            if (!cleanSlug) {
+                alert('URL slug is required. Enter a valid product slug.');
+                setActiveTab('seo');
+                setLoading(false);
+                return;
+            }
+
+            const categoryName = categories.find((c) => c.id === categoryId)?.name || '';
+            const autoSeo = buildProductSeo({
+                name: productName,
+                description,
+                categoryName,
+                siteName: getSetting('site_name') || 'Affordable Perfumes GH',
+                scentNotes,
+            });
+            const finalSeoTitle = seoTitle.trim() || autoSeo.seo_title;
+            const finalSeoDescription = metaDescription.trim() || autoSeo.seo_description;
+            const finalFocus = focusKeyword.trim() || autoSeo.focus_keyword;
+            const finalTags = (keywords as string)
+                .split(',')
+                .map((k: string) => k.trim())
+                .filter(Boolean);
+            const tagsToSave = finalTags.length > 0 ? finalTags : autoSeo.tags;
+
             const productData = {
                 name: productName,
-                slug: urlSlug || productName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+                slug: cleanSlug,
                 description,
                 category_id: categoryId || null,
                 price: parseFloat(price) || 0,
@@ -301,14 +387,17 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
                 wholesale_moq: isWholesale && wholesaleMoq ? parseInt(wholesaleMoq) : null,
                 status: status.toLowerCase(),
                 featured: isWholesale ? false : featured,
-                seo_title: seoTitle,
-                seo_description: metaDescription,
-                tags: (keywords as string).split(',').map((k: string) => k.trim()).filter(Boolean),
+                seo_title: finalSeoTitle,
+                seo_description: finalSeoDescription,
+                tags: tagsToSave,
                 metadata: {
+                    ...existingMeta,
                     low_stock_threshold: parseInt(lowStockThreshold) || 5,
                     preorder_shipping: preorderShipping.trim() || null,
                     scent_notes: scentNotes.trim() || null,
-                    origin: productOrigin.trim() || null
+                    origin: productOrigin.trim() || null,
+                    seo_focus_keyword: finalFocus,
+                    seo_noindex: allowIndex ? false : true,
                 }
             };
 
@@ -1132,75 +1221,209 @@ export default function ProductForm({ initialData, isEditMode = false }: Product
                         </div>
                     )}
 
-                    {activeTab === 'seo' && (
-                        <div className="space-y-6 max-w-3xl">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900 mb-1">Search Engine Optimization</h3>
-                                <p className="text-gray-600">Optimize how this product appears in search results</p>
-                            </div>
+                    {activeTab === 'seo' && (() => {
+                        const previewTitle = (seoTitle.trim() || productName.trim() || 'Product title').slice(0, 70);
+                        const previewDesc = (metaDescription.trim() || stripHtml(description) || 'Add a meta description to improve click-through from Google.').slice(0, 160);
+                        const previewSlug = slugify(urlSlug || productName) || 'product-slug';
+                        const canonicalUrl = `${siteOrigin}/product/${previewSlug}`;
+                        const titleLen = seoTitle.trim().length;
+                        const descLen = metaDescription.trim().length;
+                        const titleTone = titleLen === 0 ? 'text-gray-500' : titleLen <= 60 ? 'text-emerald-600' : titleLen <= 70 ? 'text-amber-600' : 'text-red-600';
+                        const descTone = descLen === 0 ? 'text-gray-500' : descLen <= 160 ? 'text-emerald-600' : descLen <= 180 ? 'text-amber-600' : 'text-red-600';
+                        const focus = focusKeyword.trim().toLowerCase();
+                        const titleHasFocus = !!focus && (seoTitle || productName).toLowerCase().includes(focus);
+                        const descHasFocus = !!focus && (metaDescription || stripHtml(description)).toLowerCase().includes(focus);
+                        const slugHasFocus = !!focus && previewSlug.includes(slugify(focus));
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                    Page Title
-                                </label>
-                                <input
-                                    type="text"
-                                    value={seoTitle}
-                                    onChange={(e) => setSeoTitle(e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="Seo friendly title"
-                                />
-                                <p className="text-sm text-gray-500 mt-2">60 characters recommended</p>
-                            </div>
+                        const fillFromProduct = () => {
+                            const categoryName = categories.find((c) => c.id === categoryId)?.name || '';
+                            const seo = buildProductSeo({
+                                name: productName,
+                                description,
+                                categoryName,
+                                siteName: getSetting('site_name') || 'Affordable Perfumes GH',
+                                scentNotes,
+                            });
+                            setSeoTitle(seo.seo_title);
+                            setMetaDescription(seo.seo_description);
+                            setFocusKeyword(seo.focus_keyword);
+                            setKeywords(seo.tags.join(', '));
+                            setSeoEdited(true);
+                        };
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                    Meta Description
-                                </label>
-                                <textarea
-                                    rows={3}
-                                    maxLength={500}
-                                    value={metaDescription}
-                                    onChange={(e) => setMetaDescription(e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                                    placeholder="Seo friendly description"
-                                />
-                                <p className="text-sm text-gray-500 mt-2">160 characters recommended</p>
-                            </div>
+                        return (
+                            <div className="space-y-8 max-w-4xl">
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-900 mb-1">Search Engine Optimization</h3>
+                                        <p className="text-gray-600 text-sm">
+                                            Control how this product appears in Google, social shares, and the product URL.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={fillFromProduct}
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-blue-200 bg-blue-50 text-blue-800 text-sm font-semibold hover:bg-blue-100 transition-colors"
+                                    >
+                                        <i className="ri-magic-line" />
+                                        Auto-fill from product
+                                    </button>
+                                </div>
 
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                    URL Slug
-                                </label>
-                                <div className="flex items-center">
-                                    <span className="text-gray-600 bg-gray-100 px-4 py-3 border-2 border-r-0 border-gray-300 rounded-l-lg">
-                                        store.com/product/
-                                    </span>
+                                {/* Google preview */}
+                                <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                                    <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Google preview</p>
+                                    <div className="space-y-1">
+                                        <p className="text-xs text-emerald-800 truncate">{canonicalUrl}</p>
+                                        <p className="text-xl text-[#1a0dab] hover:underline leading-snug line-clamp-2">{previewTitle}</p>
+                                        <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">{previewDesc}</p>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-semibold text-gray-900">Page Title</label>
+                                        <span className={`text-xs font-medium ${titleTone}`}>{titleLen}/60</span>
+                                    </div>
                                     <input
                                         type="text"
-                                        value={urlSlug}
-                                        onChange={(e) => { setSlugEdited(true); setUrlSlug(e.target.value); }}
-                                        className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-r-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                        placeholder="product-slug"
+                                        value={seoTitle}
+                                        onChange={(e) => { setSeoEdited(true); setSeoTitle(e.target.value); }}
+                                        maxLength={70}
+                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                        placeholder={`${productName || 'Product name'} | Buy Online in Ghana`}
                                     />
+                                    <p className="text-sm text-gray-500 mt-2">
+                                        Aim for 50–60 characters. Include the product name and a clear benefit (e.g. delivery in Ghana).
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-semibold text-gray-900">Meta Description</label>
+                                        <span className={`text-xs font-medium ${descTone}`}>{descLen}/160</span>
+                                    </div>
+                                    <textarea
+                                        rows={4}
+                                        maxLength={200}
+                                        value={metaDescription}
+                                        onChange={(e) => { setSeoEdited(true); setMetaDescription(e.target.value); }}
+                                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                                        placeholder="Authentic fragrance with fast nationwide delivery across Ghana. Shop now at Affordable Perfumes GH."
+                                    />
+                                    <p className="text-sm text-gray-500 mt-2">
+                                        140–160 characters works best. Write for shoppers: authenticity, delivery, and price cue.
+                                    </p>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-900 mb-2">URL Slug</label>
+                                    <div className="flex flex-col sm:flex-row sm:items-stretch rounded-lg overflow-hidden border-2 border-gray-300 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                                        <span className="text-gray-600 bg-gray-100 px-3 sm:px-4 py-3 text-sm whitespace-nowrap border-b sm:border-b-0 sm:border-r border-gray-300">
+                                            {siteHost}/product/
+                                        </span>
+                                        <input
+                                            type="text"
+                                            value={urlSlug}
+                                            onChange={(e) => {
+                                                setSlugEdited(true);
+                                                setUrlSlug(slugify(e.target.value));
+                                            }}
+                                            onBlur={() => setUrlSlug(slugify(urlSlug))}
+                                            className="flex-1 px-4 py-3 border-0 focus:ring-0 min-w-0"
+                                            placeholder="queen-of-arabia-100ml"
+                                        />
+                                    </div>
+                                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                        <p className="text-sm text-gray-500 break-all">
+                                            Canonical: <span className="text-gray-800 font-medium">{canonicalUrl}</span>
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setSlugEdited(false);
+                                                setUrlSlug(slugify(productName));
+                                            }}
+                                            className="text-sm text-blue-700 font-medium hover:underline text-left"
+                                        >
+                                            Reset from product name
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="grid md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-900 mb-2">Focus keyword</label>
+                                        <input
+                                            type="text"
+                                            value={focusKeyword}
+                                            onChange={(e) => { setSeoEdited(true); setFocusKeyword(e.target.value); }}
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="e.g. Lattafa Asad Ghana"
+                                        />
+                                        <p className="text-sm text-gray-500 mt-2">Primary phrase you want this page to rank for.</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-semibold text-gray-900 mb-2">Keywords / tags</label>
+                                        <input
+                                            type="text"
+                                            value={keywords}
+                                            onChange={(e) => { setSeoEdited(true); setKeywords(e.target.value); }}
+                                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                            placeholder="perfume Ghana, Lattafa, oud, Accra delivery"
+                                        />
+                                        <p className="text-sm text-gray-500 mt-2">Comma-separated. Used as product tags and SEO keywords.</p>
+                                    </div>
+                                </div>
+
+                                {focus ? (
+                                    <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                                        <p className="text-sm font-semibold text-gray-900 mb-3">Focus keyword checklist</p>
+                                        <ul className="space-y-2 text-sm">
+                                            <li className={titleHasFocus ? 'text-emerald-700' : 'text-gray-600'}>
+                                                <i className={`${titleHasFocus ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'} mr-2`} />
+                                                Appears in page title
+                                            </li>
+                                            <li className={descHasFocus ? 'text-emerald-700' : 'text-gray-600'}>
+                                                <i className={`${descHasFocus ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'} mr-2`} />
+                                                Appears in meta description
+                                            </li>
+                                            <li className={slugHasFocus ? 'text-emerald-700' : 'text-gray-600'}>
+                                                <i className={`${slugHasFocus ? 'ri-checkbox-circle-fill' : 'ri-checkbox-blank-circle-line'} mr-2`} />
+                                                Appears in URL slug
+                                            </li>
+                                        </ul>
+                                    </div>
+                                ) : null}
+
+                                <div className="flex items-start gap-3 rounded-xl border border-gray-200 p-4">
+                                    <input
+                                        id="allow-index"
+                                        type="checkbox"
+                                        checked={allowIndex}
+                                        onChange={(e) => setAllowIndex(e.target.checked)}
+                                        className="mt-1 w-5 h-5 text-blue-700 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                    />
+                                    <label htmlFor="allow-index" className="cursor-pointer">
+                                        <span className="block font-semibold text-gray-900">Allow search engines to index this product</span>
+                                        <span className="block text-sm text-gray-500 mt-1">
+                                            Uncheck for drafts, wholesale-only, or temporary listings you do not want in Google.
+                                        </span>
+                                    </label>
+                                </div>
+
+                                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                    <p className="font-semibold mb-1"><i className="ri-information-line mr-1" />SEO tips for perfume products</p>
+                                    <ul className="list-disc pl-5 space-y-1 text-amber-900/90">
+                                        <li>Put brand + scent name in the title (e.g. “Armaf Club de Nuit Intense Man 105ml”).</li>
+                                        <li>Mention Ghana / Accra / nationwide delivery in the description when relevant.</li>
+                                        <li>Keep the slug short and readable: brand-name-size, no special characters.</li>
+                                        <li>Use a clear primary image — it becomes the Open Graph / WhatsApp share preview.</li>
+                                    </ul>
                                 </div>
                             </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-900 mb-2">
-                                    Keywords
-                                </label>
-                                <input
-                                    type="text"
-                                    value={keywords}
-                                    onChange={(e) => setKeywords(e.target.value)}
-                                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                    placeholder="keyword1, keyword2"
-                                />
-                                <p className="text-sm text-gray-500 mt-2">Separate keywords with commas</p>
-                            </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
             </div>
         </div>

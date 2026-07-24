@@ -57,6 +57,8 @@ interface ProductCardProps {
   // New props for Glassmorphism design
   notes?: string;
   origin?: string;
+  /** Tighter layout for shop / dense grids */
+  compact?: boolean;
 }
 
 export default function ProductCard({
@@ -76,7 +78,8 @@ export default function ProductCard({
   minVariantPrice,
   colorVariants = [],
   notes,
-  origin
+  origin,
+  compact = false,
 }: ProductCardProps) {
   const { addToCart } = useCart();
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
@@ -90,11 +93,16 @@ export default function ProductCard({
 
   return (
     <div className="group relative w-full h-full">
-      <div className="relative flex flex-col h-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-[20px] overflow-hidden transition-all duration-500 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:-translate-y-1">
+      <div
+        className={`relative flex flex-col h-full w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-xl overflow-hidden transition-all duration-500 hover:shadow-[0_12px_24px_-10px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 ${compact ? 'max-w-[220px] mx-auto' : 'max-w-[280px] mx-auto'}`}
+      >
 
         {/* Image Container with Overlay */}
-        <Link href={`/product/${slug}`} className="relative block aspect-[4/5] overflow-hidden bg-gradient-to-b from-transparent to-gray-50/30">
-          <div className="absolute inset-0 flex items-center justify-center p-2 transition-transform duration-700 ease-out group-hover:scale-110 group-hover:-rotate-1">
+        <Link
+          href={`/product/${slug}`}
+          className={`relative block overflow-hidden bg-gradient-to-b from-transparent to-gray-50/30 ${compact ? 'aspect-[5/6]' : 'aspect-square'}`}
+        >
+          <div className="absolute inset-0 flex items-center justify-center p-1.5 sm:p-2 transition-transform duration-700 ease-out group-hover:scale-105 group-hover:-rotate-1">
             <LazyImage
               src={image}
               alt={name}
@@ -113,19 +121,19 @@ export default function ProductCard({
           )}
 
           {/* Badges */}
-          <div className="absolute top-3 left-3 flex flex-col gap-2 z-20">
+          <div className="absolute top-2 left-2 flex flex-col gap-1 z-20">
             {badge && (
-              <span className="bg-white/90 backdrop-blur text-ebony text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 rounded-full shadow-sm">
+              <span className="bg-white/90 backdrop-blur text-ebony text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-sm">
                 {badge}
               </span>
             )}
             {discount > 0 && (
-              <span className="bg-red-50 text-red-700 text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 rounded-full shadow-sm">
+              <span className="bg-red-50 text-red-700 text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-sm">
                 -{discount}%
               </span>
             )}
             {!inStock && (
-              <span className="bg-ebony text-white text-[10px] uppercase tracking-wider font-bold px-3 py-1.5 rounded-full shadow-sm">
+              <span className="bg-ebony text-white text-[9px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full shadow-sm">
                 Out of Stock
               </span>
             )}
@@ -153,15 +161,15 @@ export default function ProductCard({
                 });
               }
             }}
-            className={`absolute top-3 right-3 w-10 h-10 flex items-center justify-center rounded-full shadow-md transition-all duration-300 z-20 ${isWishlisted ? 'bg-red-50 text-red-500' : 'bg-white/80 text-gray-400 hover:text-red-500 hover:bg-white'
+            className={`absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded-full shadow-md transition-all duration-300 z-20 ${isWishlisted ? 'bg-red-50 text-red-500' : 'bg-white/80 text-gray-400 hover:text-red-500 hover:bg-white'
               } backdrop-blur-md border border-white/40 group/wishlist`}
           >
-            <i className={`${isWishlisted ? 'ri-heart-fill' : 'ri-heart-line'} text-lg group-hover/wishlist:scale-110 transition-transform`}></i>
+            <i className={`${isWishlisted ? 'ri-heart-fill' : 'ri-heart-line'} text-base group-hover/wishlist:scale-110 transition-transform`}></i>
           </button>
         </Link>
 
         {/* Content Body */}
-        <div className="flex flex-col flex-grow px-5 pb-5 pt-3 text-center">
+        <div className="flex flex-col flex-grow px-2.5 sm:px-3 pb-2.5 sm:pb-3 pt-1.5 text-center">
 
           {/* Origin Label */}
           {origin && (
@@ -173,13 +181,15 @@ export default function ProductCard({
           )}
 
           <Link href={`/product/${slug}`} className="group/title">
-            <h3 className="font-serif text-lg text-ebony mb-1 group-hover/title:text-champagne-dark transition-colors line-clamp-1">
+            <h3
+              className={`font-serif text-ebony mb-0.5 group-hover/title:text-champagne-dark transition-colors leading-snug ${compact ? 'text-xs sm:text-sm line-clamp-2 min-h-[2.5rem]' : 'text-sm sm:text-base line-clamp-2'}`}
+            >
               {name}
             </h3>
           </Link>
 
-          <div className="flex items-center justify-center space-x-2 mb-3">
-            <span className="text-ebony font-semibold">{formatPrice(displayPrice)}</span>
+          <div className="flex items-center justify-center space-x-2 mb-1.5">
+            <span className="text-ebony text-sm font-semibold">{formatPrice(displayPrice)}</span>
             {originalPrice && (
               <span className="text-xs text-gray-400 line-through">{formatPrice(originalPrice)}</span>
             )}
@@ -187,7 +197,7 @@ export default function ProductCard({
 
           {/* Color Swatches */}
           {colorVariants.length > 0 && (
-            <div className="flex items-center justify-center gap-1.5 mb-4">
+            <div className="flex items-center justify-center gap-1.5 mb-2">
               {colorVariants.slice(0, MAX_SWATCHES).map((color) => (
                 <button
                   key={color.name}
@@ -210,12 +220,12 @@ export default function ProductCard({
           )}
 
           {/* Add to Cart (Minimalist) */}
-          <div className="mt-auto pt-2">
+          <div className="mt-auto pt-1">
             {inStock ? (
               hasVariants ? (
                 <Link
                   href={`/product/${slug}`}
-                  className="w-full inline-block text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony py-2 border-b border-gray-100 hover:border-ebony transition-all duration-300"
+                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony py-1.5 border-b border-gray-100 hover:border-ebony transition-all duration-300"
                 >
                   Select Options
                 </Link>
@@ -225,7 +235,7 @@ export default function ProductCard({
                     e.preventDefault();
                     addToCart({ id, name, price, image, quantity: moq, slug, maxStock, moq });
                   }}
-                  className="w-full inline-block text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony hover:text-champagne-dark py-2 border-b border-gray-100 hover:border-champagne-gold transition-all duration-300"
+                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony hover:text-champagne-dark py-1.5 border-b border-gray-100 hover:border-champagne-gold transition-all duration-300"
                 >
                   Add to Cart
                 </button>

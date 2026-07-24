@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createStorageClient } from "@/lib/db/storage";
 import { isPlainPostgres } from "@/lib/db/mode";
+import { compressImageBuffer } from "@/lib/image-compress";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,6 +49,11 @@ export async function POST(
   } else {
     buf = Buffer.from(await req.arrayBuffer());
   }
+
+  const compressed = await compressImageBuffer(buf, contentType);
+  buf = compressed.buffer;
+  contentType = compressed.contentType;
+
   const storage = createStorageClient();
   const { data, error } = await storage.from(bucket).upload(objectPath, buf, {
     contentType,

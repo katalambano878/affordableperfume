@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import PageHero from '@/components/PageHero';
 
 function OrderTrackingContent() {
   const searchParams = useSearchParams();
@@ -39,48 +39,27 @@ function OrderTrackingContent() {
     setError('');
 
     try {
-      // Only select the fields we need — avoid exposing unnecessary data
-      const { data, error: fetchError } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          status,
-          payment_status,
-          total,
-          email,
-          created_at,
-          shipping_address,
-          metadata,
-          order_items (
-            id,
-            product_name,
-            variant_name,
-            quantity,
-            unit_price,
-            metadata,
-            products (
-              product_images (url)
-            )
-          )
-        `)
-        .eq('order_number', orderNum)
-        .single();
+      const res = await fetch('/api/storefront/track-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reference: orderNum.trim(),
+          email: emailToVerify.trim(),
+        }),
+      });
 
-      if (fetchError || !data) {
-        setError('Order not found. Please check your order number and try again.');
+      const payload = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(
+          payload.error ||
+            'Order not found. Please check your order number, tracking number, and email, then try again.'
+        );
         setIsTracking(false);
         return;
       }
 
-      // SECURITY: Always verify email matches — this is mandatory
-      if (data.email?.toLowerCase() !== emailToVerify.toLowerCase()) {
-        setError('The email address does not match this order. Please use the email you placed the order with.');
-        setIsTracking(false);
-        return;
-      }
-
-      setOrder(data);
+      setOrder(payload.order);
       setIsTracking(true);
     } catch (err) {
       console.error('Error fetching order:', err);
@@ -184,13 +163,14 @@ function OrderTrackingContent() {
   // Search form
   if (!isTracking || !order) {
     return (
-      <main className="min-h-screen bg-gray-50 py-12 px-4">
-        <div className="max-w-2xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">Track Your Order</h1>
-            <p className="text-gray-600">Enter your order number or tracking number to track your shipment</p>
-          </div>
-
+      <>
+        <PageHero
+          title="Track Your Order"
+          subtitle="Enter your order number or tracking number and your email to track your shipment"
+          image="tracking"
+        />
+        <main className="min-h-screen bg-gray-50 pb-12 px-4">
+          <div className="max-w-2xl mx-auto -mt-10 relative z-10">
           <div className="bg-white rounded-xl shadow-sm p-8">
             <form onSubmit={handleTrack} className="space-y-6">
               <div>
@@ -259,7 +239,8 @@ function OrderTrackingContent() {
             </Link>
           </div>
         </div>
-      </main>
+        </main>
+      </>
     );
   }
 
@@ -423,10 +404,6 @@ function OrderTrackingContent() {
             <Link href="/contact" className="text-blue-700 hover:text-blue-900 font-semibold whitespace-nowrap">
               <i className="ri-customer-service-line mr-1"></i>
               Contact Support
-            </Link>
-            <Link href="/returns" className="text-blue-700 hover:text-blue-900 font-semibold whitespace-nowrap">
-              <i className="ri-arrow-left-right-line mr-1"></i>
-              Returns Policy
             </Link>
           </div>
         </div>

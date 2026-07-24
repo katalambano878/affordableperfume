@@ -4,7 +4,7 @@ import { escapeHtml } from '@/lib/sanitize';
 import { normalizePublicOrigin } from '@/lib/site-url';
 
 const resend = new Resend(process.env.RESEND_API_KEY || 'missing_api_key');
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@standardecom.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'info@affordableperfumesgh.com';
 
 async function getBrand() {
     let siteName = '';
@@ -473,6 +473,32 @@ ${emailButton('Start Shopping', `${brand.url}/shop`, brand)}
             message: `Welcome ${firstName}! Thanks for joining ${brand.name || 'our store'}.`
         });
     }
+}
+
+/** Insider Club / homepage newsletter signup — includes optional promo code from env. */
+export async function sendNewsletterWelcome(email: string) {
+    const brand = await getBrand();
+    const code = (process.env.NEWSLETTER_PROMO_CODE || 'INSIDER10').trim();
+    const host = brand.url.replace(/https?:\/\//, '').split('/')[0];
+    const emailFrom = `${brand.emailName} <noreply@${host}>`;
+    const safeCode = escapeHtml(code);
+
+    await resend.emails.send({
+        from: emailFrom,
+        to: email,
+        subject: `Your 10% welcome offer — ${brand.name || 'Affordable Perfumes GH'}`,
+        html: emailLayout(`
+<h2 style="margin:0 0 16px;color:#111827;font-size:22px;text-align:center;">Welcome to The Insider Club</h2>
+<p style="color:#374151;font-size:14px;line-height:1.7;margin:16px 0;">Thanks for subscribing. Use this code on your <strong>first order</strong>:</p>
+<div style="background-color:#f0f9ff;border:2px dashed #0ea5e9;border-radius:12px;padding:20px;margin:24px 0;text-align:center;">
+  <p style="margin:0 0 8px;color:#0369a1;font-size:12px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;">Your code</p>
+  <p style="margin:0;color:#0c4a6e;font-size:28px;font-weight:800;letter-spacing:0.15em;">${safeCode}</p>
+  <p style="margin:12px 0 0;color:#64748b;font-size:13px;">10% off your first order</p>
+</div>
+<p style="color:#374151;font-size:14px;line-height:1.7;margin:0 0 16px;">You'll also get updates on new arrivals, restocks, and exclusive deals.</p>
+${emailButton('Shop now', `${brand.url}/shop`, brand, '#0ea5e9')}
+`, brand, `Your welcome code: ${code}`),
+    });
 }
 
 export async function sendPaymentLink(order: any) {

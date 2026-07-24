@@ -45,7 +45,7 @@ export default function AdminReviewsPage() {
           title: r.title,
           comment: r.content,
           date: new Date(r.created_at).toLocaleDateString(),
-          status: r.status || 'Pending',
+          status: (r.status || 'pending').toLowerCase(),
           helpful: r.helpful || 0
         }));
         setReviews(formatted);
@@ -79,10 +79,17 @@ export default function AdminReviewsPage() {
     rejected: reviews.filter(r => r.status.toLowerCase() === 'rejected').length
   };
 
-  const statusColors: any = {
-    'Pending': 'bg-amber-100 text-amber-700',
-    'Approved': 'bg-blue-100 text-blue-700',
-    'Rejected': 'bg-red-100 text-red-700'
+  const formatReviewStatus = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'approved') return 'Approved';
+    if (s === 'rejected') return 'Rejected';
+    return 'Pending';
+  };
+
+  const statusColors: Record<string, string> = {
+    pending: 'bg-amber-100 text-amber-700',
+    approved: 'bg-blue-100 text-blue-700',
+    rejected: 'bg-red-100 text-red-700',
   };
 
   const handleSelectAll = () => {
@@ -105,8 +112,8 @@ export default function AdminReviewsPage() {
     if (selectedReviews.length === 0) return;
     try {
       let newStatus = '';
-      if (action === 'Approve') newStatus = 'Approved';
-      if (action === 'Reject') newStatus = 'Rejected';
+      if (action === 'Approve') newStatus = 'approved';
+      if (action === 'Reject') newStatus = 'rejected';
 
       if (newStatus) {
         const { error } = await supabase
@@ -284,8 +291,8 @@ export default function AdminReviewsPage() {
                     </td>
                     <td className="py-4 px-4 text-sm text-gray-600 whitespace-nowrap">{review.date}</td>
                     <td className="py-4 px-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors[review.status] || 'bg-gray-100'}`}>
-                        {review.status}
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${statusColors[review.status.toLowerCase()] || 'bg-gray-100 text-gray-700'}`}>
+                        {formatReviewStatus(review.status)}
                       </span>
                     </td>
                   </tr>

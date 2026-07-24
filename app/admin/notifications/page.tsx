@@ -31,9 +31,15 @@ export default function NotificationsPage() {
             // 2. Fetch Recipients from the customers table (includes secondary contacts)
             const { data: customers, error: fetchError } = await supabase
                 .from('customers')
-                .select('email, phone, full_name, secondary_phone, secondary_email');
+                .select('email, phone, full_name, secondary_phone, secondary_email, tags');
 
             if (fetchError) throw fetchError;
+
+            const audienceCustomers = (customers || []).filter((c) => {
+                if (form.audience !== 'newsletter') return true;
+                const tags = Array.isArray(c.tags) ? c.tags : [];
+                return tags.includes('newsletter');
+            });
 
             // Build recipients with deduplication
             const seenPhones = new Set<string>();
@@ -42,7 +48,7 @@ export default function NotificationsPage() {
             const normalizePhone = (p: string) => p.replace(/[\s\-\(\)\.]+/g, '').replace(/^00/, '+');
 
             const recipients: any[] = [];
-            for (const c of (customers || [])) {
+            for (const c of audienceCustomers) {
                 const phones = [c.phone, c.secondary_phone].filter(Boolean).map((p: string) => normalizePhone(p));
                 const emails = [c.email, c.secondary_email].filter(Boolean).map((e: string) => e.toLowerCase().trim());
 
@@ -101,7 +107,7 @@ export default function NotificationsPage() {
                         type: 'campaign',
                         payload: {
                             recipients: batch,
-                            subject: form.subject,
+                            subject: form.channels.email ? form.subject : (form.subject || 'Store update'),
                             message: form.message,
                             channels: form.channels,
                         }

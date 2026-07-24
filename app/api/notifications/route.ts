@@ -37,7 +37,7 @@ export async function POST(request: Request) {
         // 'order_created' requires a valid order to exist (verified below)
         // 'contact' is public but rate-limited
         // ============================================================
-        const adminOnlyTypes = ['campaign', 'order_updated', 'order_status', 'payment_link', 'welcome'];
+        const adminOnlyTypes = ['campaign', 'order_updated', 'order_status', 'payment_link'];
         const requiresAdminAuth = adminOnlyTypes.includes(type);
 
         if (requiresAdminAuth) {
@@ -121,6 +121,9 @@ export async function POST(request: Request) {
             if (!payload.email) {
                 return NextResponse.json({ error: 'Missing email' }, { status: 400 });
             }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(payload.email))) {
+                return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+            }
             await sendWelcomeMessage(payload);
             return NextResponse.json({ success: true, message: 'Welcome message sent' });
         }
@@ -162,9 +165,15 @@ export async function POST(request: Request) {
             if (!recipients || !Array.isArray(recipients) || recipients.length === 0) {
                 return NextResponse.json({ error: 'Recipients required' }, { status: 400 });
             }
-            if (!subject || !message) {
-                return NextResponse.json({ error: 'Subject and message required' }, { status: 400 });
+            if (!message) {
+                return NextResponse.json({ error: 'Message required' }, { status: 400 });
             }
+            const sendEmail = Boolean(channels?.email);
+            const sendSms = Boolean(channels?.sms);
+            if (sendEmail && !subject) {
+                return NextResponse.json({ error: 'Email subject required when sending email' }, { status: 400 });
+            }
+            const emailSubject = subject?.trim() || 'Message from our store';
 
             // Deduplicate phone numbers and emails server-side
             const seenPhones = new Set<string>();
@@ -172,7 +181,7 @@ export async function POST(request: Request) {
             const results = { email: 0, sms: 0, errors: 0 };
 
             // SECURITY: Sanitize subject and message to prevent XSS in emails
-            const safeSubject = escapeHtml(subject);
+            const safeSubject = escapeHtml(emailSubject);
             const safeMessage = escapeHtml(message);
 
             for (const recipient of recipients) {
@@ -190,7 +199,7 @@ export async function POST(request: Request) {
 `, safeSubject);
                             await sendEmail({
                                 to: recipient.email,
-                                subject: subject, // Keep original for email subject header
+                                subject: emailSubject, // Keep original for email subject header
                                 html: brandedHtml
                             });
                             results.email++;

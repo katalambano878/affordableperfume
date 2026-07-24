@@ -140,5 +140,11 @@ export const RATE_LIMITS = {
   default: {
     maxRequests: 100,
     windowSeconds: 60 // 100 requests per minute
-  }
+  },
+
+  // Order tracking — limit guessing order numbers / emails
+  trackOrder: {
+    maxRequests: 30,
+    windowSeconds: 60,
+  },
 };

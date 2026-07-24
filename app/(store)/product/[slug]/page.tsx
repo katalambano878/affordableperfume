@@ -10,7 +10,7 @@ async function getProduct(slug: string) {
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
   const query = serverDb
     .from('products')
-    .select('id, name, slug, description, short_description, price, compare_at_price, status, seo_title, seo_description, metadata, rating_avg, product_images(url, position), categories(name, slug)')
+    .select('id, name, slug, description, short_description, price, compare_at_price, status, seo_title, seo_description, tags, metadata, rating_avg, product_images(url, position), categories(name, slug)')
     .or('is_wholesale.is.null,is_wholesale.eq.false');
 
   const { data } = isUUID
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
   const baseUrl = SITE_URL;
   const title = product.seo_title || product.name;
-  const description = (product.seo_description || product.short_description || product.description || `Buy ${product.name} - Quality product from Ghana.`)
+  const description = (product.seo_description || product.short_description || product.description || `Buy ${product.name} - authentic perfume delivered across Ghana.`)
     .replace(/<[^>]*>/g, '')
     .slice(0, 160);
   const images = (product.product_images as { url: string; position?: number }[] | null) || [];
@@ -36,10 +36,18 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const ogImage = firstImage ? toAbsolutePublicUrl(firstImage, baseUrl) : `${baseUrl}/og-default`;
   const productUrl = `${baseUrl}/product/${product.slug}`;
   const category = (product as any).categories?.name;
+  const meta = (product.metadata || {}) as Record<string, unknown>;
+  const noindex = meta.seo_noindex === true || product.status !== 'active';
+  const focusKeyword = typeof meta.seo_focus_keyword === 'string' ? meta.seo_focus_keyword : '';
+  const tagList = Array.isArray(product.tags) ? product.tags.filter(Boolean) : [];
+  const keywords = [focusKeyword, ...tagList, category, 'perfume Ghana', 'fragrance Accra']
+    .filter((k): k is string => typeof k === 'string' && !!k.trim())
+    .map((k) => k.trim());
 
   return {
     title,
     description,
+    keywords: keywords.length ? Array.from(new Set(keywords)) : undefined,
     openGraph: {
       type: 'website',
       url: productUrl,
@@ -47,6 +55,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       description,
       images: [{ url: ogImage, width: 1200, height: 630, alt: product.name }],
       locale: 'en_GH',
+      siteName: 'Affordable Perfumes GH',
     },
     twitter: {
       card: 'summary_large_image',
@@ -57,7 +66,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     alternates: {
       canonical: productUrl,
     },
-    robots: { index: true, follow: true },
+    robots: noindex
+      ? { index: false, follow: false }
+      : { index: true, follow: true },
     other: {
       'product:price:amount': String(product.price),
       'product:price:currency': 'GHS',

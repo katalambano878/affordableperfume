@@ -86,7 +86,9 @@ export default function AdminCustomersPage() {
 
       const { data: orders } = await supabase
         .from('orders')
-        .select('id, user_id, email, total, created_at, status, shipping_address');
+        .select('id, user_id, email, total, created_at, status, shipping_address')
+        .order('created_at', { ascending: false })
+        .limit(2000);
 
       // Process registered users
       const registeredCustomers = (profiles || []).map((profile: any) => {
@@ -442,15 +444,10 @@ export default function AdminCustomersPage() {
                         <Link
                           href={`/admin/customers/${customer.id}`}
                           className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="View customer"
                         >
                           <i className="ri-eye-line text-lg"></i>
                         </Link>
-                        <button className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer">
-                          <i className="ri-mail-line text-lg"></i>
-                        </button>
-                        <button className="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer">
-                          <i className="ri-delete-bin-line text-lg"></i>
-                        </button>
                       </div>
                     </td>
                   </tr>

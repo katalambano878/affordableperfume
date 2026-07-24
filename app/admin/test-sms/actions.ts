@@ -1,7 +1,7 @@
 'use server';
 
 import { verifyAdminToken } from '@/lib/auth';
-import { supabase } from '@/lib/supabase';
+import { serverDb } from '@/lib/server-db';
 
 export async function testSmsAction(phone: string, message: string, authToken: string) {
     // SECURITY: Verify admin authentication before allowing SMS sending
@@ -50,11 +50,11 @@ export async function testSmsAction(phone: string, message: string, authToken: s
         let senderId = process.env.MOOLRE_SMS_SENDER_ID || 'Store';
         if (!process.env.MOOLRE_SMS_SENDER_ID) {
             try {
-                const { data: settings } = await supabase
+                const { data: settings } = await serverDb
                     .from('site_settings')
                     .select('value')
                     .eq('key', 'site_name')
-                    .single();
+                    .maybeSingle();
                 if (settings?.value) senderId = settings.value.substring(0, 11);
             } catch (e) { }
         }

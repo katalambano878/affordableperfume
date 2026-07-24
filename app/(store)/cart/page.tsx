@@ -59,7 +59,7 @@ export default function CartPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <PageHero title="Shopping Cart" />
+      <PageHero title="Shopping Cart" image="perfumes" />
       <div className="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
         <CartCountdown />

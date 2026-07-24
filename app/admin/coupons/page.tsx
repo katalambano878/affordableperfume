@@ -124,7 +124,7 @@ export default function AdminCouponsPage() {
       alert('Coupon code is required');
       return;
     }
-    if (!form.value || Number(form.value) <= 0) {
+    if (form.type !== 'free_shipping' && (!form.value || Number(form.value) <= 0)) {
       alert('Enter a valid discount value');
       return;
     }

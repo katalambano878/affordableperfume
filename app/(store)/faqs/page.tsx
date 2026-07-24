@@ -1,8 +1,9 @@
-"use client";
+'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
 import { useCMS } from '@/context/CMSContext';
+import PageHero from '@/components/PageHero';
 
 export default function FAQsPage() {
   const { getSetting } = useCMS();
@@ -145,29 +146,22 @@ export default function FAQsPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <div className="bg-gradient-to-br from-blue-50 via-white to-amber-50 py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-gray-900 mb-6">
-              Frequently Asked Questions
-            </h1>
-            <p className="text-xl text-gray-600 mb-8 leading-relaxed">
-              Find quick answers to common questions about ordering, shipping, returns, payments, and more.
-            </p>
-
-            <div className="relative">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search for answers..."
-                className="w-full pl-12 pr-4 py-4 border border-gray-300 rounded-full focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm shadow-lg"
-              />
-              <i className="ri-search-line absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 text-xl"></i>
-            </div>
-          </div>
+      <PageHero
+        title="Frequently Asked Questions"
+        subtitle="Find quick answers to common questions about ordering, shipping, returns, payments, and more."
+        image="support"
+      >
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search for answers..."
+            className="w-full pl-12 pr-4 py-4 border border-gray-200 rounded-full focus:ring-2 focus:ring-blue-400 focus:border-transparent text-sm shadow-lg text-gray-900"
+          />
+          <i className="ri-search-line absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-xl" />
         </div>
-      </div>
+      </PageHero>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div className="flex flex-wrap gap-3 justify-center mb-12">

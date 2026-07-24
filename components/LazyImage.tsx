@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import { resolveStorageUrl } from '@/lib/storage-url';
 
 interface LazyImageProps {
   src: string;
@@ -41,6 +42,8 @@ export default function LazyImage({
   };
 
   // Fallback for invalid/empty URLs
+  const resolvedSrc = resolveStorageUrl(src);
+
   if (!src || hasError) {
     return (
       <div className={`relative overflow-hidden bg-gray-200 flex items-center justify-center ${className}`} style={{ width, height }}>
@@ -55,7 +58,7 @@ export default function LazyImage({
         <div className="absolute inset-0 bg-gray-200 animate-pulse z-10"></div>
       )}
       <Image
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         fill
         sizes={sizes}
@@ -63,7 +66,7 @@ export default function LazyImage({
         onLoad={handleLoad}
         onError={handleError}
         priority={priority}
-        quality={75}
+        quality={62}
       />
     </div>
   );
