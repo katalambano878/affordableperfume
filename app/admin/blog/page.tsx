@@ -82,14 +82,13 @@ export default function AdminBlogPage() {
           <h1 className="text-3xl font-bold text-gray-900">Blog Posts</h1>
           <p className="text-gray-600 mt-1">Create and manage your blog content</p>
         </div>
-        <button
-          type="button"
-          onClick={() => alert('Blog editor coming soon — contact support to add posts via database for now.')}
-          className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap"
+        <Link
+          href="/admin/blog/new"
+          className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap inline-flex items-center"
         >
           <i className="ri-add-line mr-2"></i>
           New Post
-        </button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -121,13 +120,12 @@ export default function AdminBlogPage() {
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No blog posts yet</h3>
             <p className="text-gray-500 mb-6">Start sharing perfume tips, new arrivals, and brand stories.</p>
-            <button
-              type="button"
-              onClick={() => alert('Blog editor coming soon.')}
-              className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold"
+            <Link
+              href="/admin/blog/new"
+              className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold inline-flex items-center"
             >
               Create First Post
-            </button>
+            </Link>
           </div>
         ) : viewMode === 'grid' ? (
           <div className="p-6 grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -153,6 +151,12 @@ export default function AdminBlogPage() {
                   <p className="text-sm text-gray-600 mb-3 line-clamp-2">{post.excerpt || 'No excerpt'}</p>
                   <p className="text-sm text-gray-500 mb-4">{post.publishDate}</p>
                   <div className="flex items-center space-x-2">
+                    <Link
+                      href={`/admin/blog/${post.id}/edit`}
+                      className="flex-1 text-center border-2 border-gray-200 text-gray-800 py-2 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      Edit
+                    </Link>
                     <button
                       type="button"
                       onClick={() => handleDelete(post.id)}
@@ -191,9 +195,14 @@ export default function AdminBlogPage() {
                     </td>
                     <td className="py-4 px-4 text-gray-700">{post.publishDate}</td>
                     <td className="py-4 px-4">
-                      <button type="button" onClick={() => handleDelete(post.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">
-                        Delete
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <Link href={`/admin/blog/${post.id}/edit`} className="text-blue-700 hover:text-blue-900 text-sm font-medium">
+                          Edit
+                        </Link>
+                        <button type="button" onClick={() => handleDelete(post.id)} className="text-red-600 hover:text-red-800 text-sm font-medium">
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
