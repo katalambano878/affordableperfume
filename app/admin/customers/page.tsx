@@ -33,40 +33,136 @@ export default function AdminCustomersPage() {
         return;
       }
 
-      if (customerData) {
-        const processed = customerData.map((customer: any) => {
-          // Determine status dynamically
-          let status = 'New';
-          const totalSpent = Number(customer.total_spent) || 0;
-          const totalOrders = customer.total_orders || 0;
+      // Denormalized customer.total_orders is often stale after Postgres cutover;
+      // always compute order stats live from the orders table.
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('id, user_id, email, total, created_at, status, shipping_address')
+        .order('created_at', { ascending: false })
+        .limit(5000);
 
-          if (totalSpent > 1000) status = 'VIP';
-          else if (totalOrders > 0) status = 'Active';
-          else if (new Date(customer.created_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000) status = 'Inactive';
+      type OrderStats = { orders: number; totalSpent: number; lastOrder: Date | null; firstOrder: Date | null; name?: string; phone?: string };
+      const statsByEmail = new Map<string, OrderStats>();
+      const statsByUserId = new Map<string, OrderStats>();
 
-          const displayName = customer.full_name ||
-            (customer.first_name && customer.last_name ? `${customer.first_name} ${customer.last_name}` : null) ||
-            customer.first_name ||
-            'No Name';
+      const bumpStats = (map: Map<string, OrderStats>, key: string, order: any) => {
+        if (!key) return;
+        const cancelled = order.status === 'cancelled';
+        const orderTotal = cancelled ? 0 : Number(order.total || 0);
+        const orderDate = new Date(order.created_at);
+        const existing = map.get(key);
+        if (!existing) {
+          map.set(key, {
+            orders: cancelled ? 0 : 1,
+            totalSpent: orderTotal,
+            lastOrder: cancelled ? null : orderDate,
+            firstOrder: orderDate,
+          });
+          return;
+        }
+        if (!cancelled) {
+          existing.orders += 1;
+          existing.totalSpent += orderTotal;
+          if (!existing.lastOrder || orderDate > existing.lastOrder) existing.lastOrder = orderDate;
+        }
+        if (!existing.firstOrder || orderDate < existing.firstOrder) existing.firstOrder = orderDate;
+      };
 
-          return {
-            id: customer.id,
-            name: displayName,
-            email: customer.email,
-            phone: customer.phone || 'N/A',
-            avatar: getInitials(displayName !== 'No Name' ? displayName : customer.email),
-            orders: totalOrders,
-            totalSpent: totalSpent,
-            joined: new Date(customer.created_at).toLocaleDateString(),
-            lastOrder: customer.last_order_at ? timeAgo(new Date(customer.last_order_at)) : 'Never',
-            status: status,
-            rawJoined: new Date(customer.created_at),
-            rawLastOrder: customer.last_order_at ? new Date(customer.last_order_at) : null,
-            isGuest: !customer.user_id
-          };
-        });
-        setCustomers(processed);
+      for (const order of orders || []) {
+        const emailKey = (order.email || '').toLowerCase().trim();
+        bumpStats(statsByEmail, emailKey, order);
+        if (order.user_id) bumpStats(statsByUserId, order.user_id, order);
+
+        // Capture guest display hints for shoppers not yet in customers
+        if (emailKey && statsByEmail.has(emailKey)) {
+          const stats = statsByEmail.get(emailKey)!;
+          const firstName = order.shipping_address?.firstName || '';
+          const lastName = order.shipping_address?.lastName || '';
+          const fullName = order.shipping_address?.full_name || `${firstName} ${lastName}`.trim();
+          if (fullName && !stats.name) stats.name = fullName;
+          if (order.shipping_address?.phone && !stats.phone) stats.phone = order.shipping_address.phone;
+        }
       }
+
+      const mergeStats = (customer: any): OrderStats => {
+        const byUser = customer.user_id ? statsByUserId.get(customer.user_id) : undefined;
+        const byEmail = customer.email ? statsByEmail.get(String(customer.email).toLowerCase().trim()) : undefined;
+        if (byUser && byEmail && byUser !== byEmail) {
+          const lastA = byUser.lastOrder?.getTime() || 0;
+          const lastB = byEmail.lastOrder?.getTime() || 0;
+          return {
+            orders: Math.max(byUser.orders, byEmail.orders),
+            totalSpent: Math.max(byUser.totalSpent, byEmail.totalSpent),
+            lastOrder: lastA >= lastB ? byUser.lastOrder : byEmail.lastOrder,
+            firstOrder:
+              (byUser.firstOrder?.getTime() || Infinity) <= (byEmail.firstOrder?.getTime() || Infinity)
+                ? byUser.firstOrder
+                : byEmail.firstOrder,
+          };
+        }
+        return byUser || byEmail || { orders: 0, totalSpent: 0, lastOrder: null, firstOrder: null };
+      };
+
+      const seenEmails = new Set<string>();
+      const processed = (customerData || []).map((customer: any) => {
+        const stats = mergeStats(customer);
+        const totalSpent = stats.totalSpent;
+        const totalOrders = stats.orders;
+
+        let status = 'New';
+        if (totalSpent > 1000) status = 'VIP';
+        else if (totalOrders > 0) status = 'Active';
+        else if (new Date(customer.created_at).getTime() < Date.now() - 30 * 24 * 60 * 60 * 1000) status = 'Inactive';
+
+        const displayName = customer.full_name ||
+          (customer.first_name && customer.last_name ? `${customer.first_name} ${customer.last_name}` : null) ||
+          customer.first_name ||
+          'No Name';
+
+        if (customer.email) seenEmails.add(String(customer.email).toLowerCase().trim());
+
+        return {
+          id: customer.id,
+          name: displayName,
+          email: customer.email,
+          phone: customer.phone || 'N/A',
+          avatar: getInitials(displayName !== 'No Name' ? displayName : customer.email),
+          orders: totalOrders,
+          totalSpent: totalSpent,
+          joined: new Date(customer.created_at).toLocaleDateString(),
+          lastOrder: stats.lastOrder ? timeAgo(stats.lastOrder) : 'Never',
+          status: status,
+          rawJoined: new Date(customer.created_at),
+          rawLastOrder: stats.lastOrder,
+          isGuest: !customer.user_id
+        };
+      });
+
+      // Include checkout guests who placed orders but have no customers row yet
+      for (const [email, stats] of statsByEmail.entries()) {
+        if (!email || seenEmails.has(email) || stats.orders <= 0) continue;
+        let status = 'New';
+        if (stats.totalSpent > 1000) status = 'VIP';
+        else if (stats.orders > 0) status = 'Active';
+        const name = stats.name || 'Guest';
+        processed.push({
+          id: `guest-${email}`,
+          name,
+          email,
+          phone: stats.phone || 'N/A',
+          avatar: getInitials(name !== 'Guest' ? name : email),
+          orders: stats.orders,
+          totalSpent: stats.totalSpent,
+          joined: (stats.firstOrder || new Date()).toLocaleDateString(),
+          lastOrder: stats.lastOrder ? timeAgo(stats.lastOrder) : 'Never',
+          status,
+          rawJoined: stats.firstOrder || new Date(),
+          rawLastOrder: stats.lastOrder,
+          isGuest: true
+        });
+      }
+
+      setCustomers(processed);
     } catch (error) {
       console.error('Error fetching customers:', error);
     } finally {

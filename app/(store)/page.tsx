@@ -55,11 +55,22 @@ export default function Home() {
     return dbValue;
   };
 
+  const resolveHeroImage = (imageUrl: string | undefined, fallbackImage: string) => {
+    if (!imageUrl) return fallbackImage;
+    // Public heroes were compressed to WebP; keep old .png CMS paths working.
+    if (imageUrl === '/hero-areej.png' || imageUrl.endsWith('/hero-areej.png')) return '/hero-areej.webp';
+    if (imageUrl === '/hero-armaf.png' || imageUrl.endsWith('/hero-armaf.png')) return '/hero-armaf.webp';
+    if (imageUrl.startsWith('/hero-') && imageUrl.endsWith('.png')) {
+      return imageUrl.replace(/\.png$/i, '.webp');
+    }
+    return imageUrl;
+  };
+
   const sanitizeHeroBanner = (banner: any, index: number) => {
     const fallback = defaultHeroSlides[index % defaultHeroSlides.length];
 
     return {
-      image: banner?.image_url || fallback.image,
+      image: resolveHeroImage(banner?.image_url, fallback.image),
       media_type: banner?.media_type,
       tag: sanitizeField(banner?.name, fallback.tag),
       heading: sanitizeField(banner?.title, fallback.heading),
