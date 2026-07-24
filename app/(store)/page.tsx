@@ -308,34 +308,6 @@ export default function Home() {
           ))
         )}
 
-        {/* Bottom Features (Desktop) - Refined glassmorphism bar */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 hidden md:block bg-black/30 backdrop-blur-md border-t border-white/10">
-          <div className="max-w-7xl mx-auto px-6 lg:px-32 py-5 flex justify-between items-center text-white">
-            <div className="flex items-center gap-4 group cursor-pointer">
-              <i className="ri-truck-line text-2xl text-amber-300 group-hover:scale-110 transition-transform"></i>
-              <div>
-                <p className="text-sm font-medium tracking-wide">Fast Delivery</p>
-                <p className="text-[10px] text-white/60 tracking-widest uppercase mt-0.5">24 - 48 Hours Nationwide</p>
-              </div>
-            </div>
-            <div className="w-px h-8 bg-white/20"></div>
-            <div className="flex items-center gap-4 group cursor-pointer">
-              <i className="ri-global-line text-2xl text-amber-300 group-hover:scale-110 transition-transform"></i>
-              <div>
-                <p className="text-sm font-medium tracking-wide">Authentic Sourcing</p>
-                <p className="text-[10px] text-white/60 tracking-widest uppercase mt-0.5">Trusted Fragrance Supply</p>
-              </div>
-            </div>
-            <div className="w-px h-8 bg-white/20"></div>
-            <div className="flex items-center gap-4 group cursor-pointer">
-              <i className="ri-verified-badge-line text-2xl text-amber-300 group-hover:scale-110 transition-transform"></i>
-              <div>
-                <p className="text-sm font-medium tracking-wide">Verified Quality</p>
-                <p className="text-[10px] text-white/60 tracking-widest uppercase mt-0.5">Every Item Checked</p>
-              </div>
-            </div>
-          </div>
-        </div>
       </section>
 
       {/* Categories Section */}
