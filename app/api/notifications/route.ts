@@ -168,9 +168,9 @@ export async function POST(request: Request) {
             if (!message) {
                 return NextResponse.json({ error: 'Message required' }, { status: 400 });
             }
-            const sendEmail = Boolean(channels?.email);
+            const wantEmail = Boolean(channels?.email);
             const sendSms = Boolean(channels?.sms);
-            if (sendEmail && !subject) {
+            if (wantEmail && !subject) {
                 return NextResponse.json({ error: 'Email subject required when sending email' }, { status: 400 });
             }
             const emailSubject = subject?.trim() || 'Message from our store';
