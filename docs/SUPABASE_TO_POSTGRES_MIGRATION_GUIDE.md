@@ -3,6 +3,8 @@
 Project: **affordableperfume** (MultiMey / Affordable Perfumes GH)  
 Stack: Next.js 15 App Router, compatibility layer in `lib/db/`, deployed on **big-vps** (Coolify).
 
+For a **cross-project** checklist (images, SEO, newsletter, customers, blog, Coolify gotchas), see [`STORE_HARDENING_PLAYBOOK.md`](./STORE_HARDENING_PLAYBOOK.md).
+
 ## Architecture (post-migration)
 
 | Supabase feature | Replacement |

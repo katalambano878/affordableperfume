@@ -3,6 +3,9 @@
 A complete, reusable guide for migrating a Next.js (App Router) app off hosted Supabase
 onto a self-hosted plain PostgreSQL + local file storage stack, deployed with Coolify.
 
+After cutover, use [`STORE_HARDENING_PLAYBOOK.md`](./STORE_HARDENING_PLAYBOOK.md) for storefront/admin
+hardening (images, SEO, newsletter, customer stats, blog editor, deploy verification).
+
 This is the exact process used to migrate **Affordable Perfumes GH**
 (Vercel + Supabase → big-vps + fleet-postgres) in July 2026. It was done
 staging-first, verified, then cut over to production with zero data loss.
