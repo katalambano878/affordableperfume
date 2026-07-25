@@ -123,7 +123,6 @@ export default function Footer() {
 
               <FooterSection title="Assistance">
                 <ul className="space-y-2.5 text-gray-400 text-sm">
-                  <li><Link href="/contact" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Concierge Service</Link></li>
                   <li><Link href="/order-tracking" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Track Parcel</Link></li>
                   <li><Link href="/shipping" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Shipping Policy</Link></li>
                   <li><Link href="/contact" className="hover:text-blue-400 hover:translate-x-1 inline-block transition-all duration-300">Contact Support</Link></li>
