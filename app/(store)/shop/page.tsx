@@ -7,7 +7,7 @@ import ProductCard, { type ColorVariant } from '@/components/ProductCard';
 import ProductCardSkeleton from '@/components/skeletons/ProductCardSkeleton';
 import { getColorHex } from '@/components/ProductCard';
 import { supabase } from '@/lib/supabase';
-import { cachedQuery, invalidateCachePrefix } from '@/lib/query-cache';
+import { cachedQuery } from '@/lib/query-cache';
 import {
   getProductCommerce,
   PRODUCT_IMAGE_PLACEHOLDER,
@@ -82,8 +82,13 @@ function ShopContent() {
   const [offset, setOffset] = useState(0);
   const productsPerPage = 12;
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const categoriesRef = useRef(categories);
+  const productsLenRef = useRef(0);
   const search = searchParams.get('search') || '';
   const filterSignature = `${selectedCategory}|${priceRange.join('-')}|${selectedRating}|${sortBy}|${search}|${featuredOnly}`;
+
+  categoriesRef.current = categories;
+  productsLenRef.current = products.length;
 
   // Initialize from URL params
   useEffect(() => {
@@ -91,19 +96,23 @@ function ShopContent() {
     const sort = searchParams.get('sort');
     const featured = searchParams.get('featured');
 
-    if (category) setSelectedCategory(decodeURIComponent(category));
+    try {
+      if (category) setSelectedCategory(decodeURIComponent(category));
+    } catch {
+      if (category) setSelectedCategory(category);
+    }
     if (sort) setSortBy(sort);
     setFeaturedOnly(featured === 'true' || featured === '1');
   }, [searchParams]);
 
-  // Fetch Categories from cached API
+  // Fetch Categories from cached API (does not remount product grid)
   useEffect(() => {
     async function fetchCategories() {
       try {
         const res = await fetch('/api/storefront/categories');
         if (res.ok) {
           const data = await res.json();
-          if (data) setCategories(data);
+          if (Array.isArray(data) && data.length) setCategories(data);
         }
       } catch (err) {
         console.error('Error fetching categories:', err);
@@ -116,21 +125,32 @@ function ShopContent() {
 
   // Fetch Products (initial + infinite scroll pages)
   useEffect(() => {
-    if (prevFilterRef.current !== filterSignature) {
+    const filterChanged = prevFilterRef.current !== filterSignature;
+    if (filterChanged) {
       prevFilterRef.current = filterSignature;
       if (offset !== 0) {
         setOffset(0);
         setProducts([]);
+        setTotalProducts(0);
         return;
       }
       setProducts([]);
+      setTotalProducts(0);
     }
+
+    let cancelled = false;
 
     async function fetchProducts() {
       const isInitial = offset === 0;
-      if (isInitial) setLoading(true);
-      else setLoadingMore(true);
+      // Only skeleton the grid when we have nothing to show (avoids scroll jump)
+      if (isInitial) {
+        if (filterChanged || productsLenRef.current === 0) setLoading(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       try {
+        const cats = categoriesRef.current;
         const applyShopFilters = (query: any, forCount = false) => {
           query = query
             .eq('status', 'active')
@@ -141,18 +161,17 @@ function ShopContent() {
           }
 
           if (selectedCategory !== 'all') {
-            const categoryObj = categories.find((c) => c.slug === selectedCategory);
+            const categoryObj = cats.find((c) => c.slug === selectedCategory);
             if (categoryObj) {
-              const targetSlugs = [selectedCategory];
-              const childSlugs = categories
+              const childIds = cats
                 .filter((c) => c.parent_id === categoryObj.id)
-                .map((c) => c.slug);
-              targetSlugs.push(...childSlugs);
+                .map((c) => c.id);
+              const targetSlugs = [
+                selectedCategory,
+                ...cats.filter((c) => c.parent_id === categoryObj.id).map((c) => c.slug),
+              ];
               query = forCount
-                ? query.in('category_id', [
-                    categoryObj.id,
-                    ...categories.filter((c) => c.parent_id === categoryObj.id).map((c) => c.id),
-                  ])
+                ? query.in('category_id', [categoryObj.id, ...childIds])
                 : query.in('categories.slug', targetSlugs);
             } else if (!forCount) {
               query = query.eq('categories.slug', selectedCategory);
@@ -174,7 +193,7 @@ function ShopContent() {
           return query;
         };
 
-        const cacheKey = `shop:v2:${filterSignature}:${offset}`;
+        const cacheKey = `shop:v3:${filterSignature}:${offset}`;
 
         const { data, error } = await cachedQuery<{ data: any; error: any }>(
           cacheKey,
@@ -192,20 +211,20 @@ function ShopContent() {
 
             switch (sortBy) {
               case 'price-low':
-                query = query.order('price', { ascending: true });
+                query = query.order('price', { ascending: true }).order('id', { ascending: true });
                 break;
               case 'price-high':
-                query = query.order('price', { ascending: false });
+                query = query.order('price', { ascending: false }).order('id', { ascending: true });
                 break;
               case 'rating':
-                query = query.order('rating_avg', { ascending: false });
+                query = query.order('rating_avg', { ascending: false }).order('id', { ascending: true });
                 break;
               case 'new':
-                query = query.order('created_at', { ascending: false });
+                query = query.order('created_at', { ascending: false }).order('id', { ascending: true });
                 break;
               case 'popular':
               default:
-                query = query.order('created_at', { ascending: false });
+                query = query.order('created_at', { ascending: false }).order('id', { ascending: true });
                 break;
             }
 
@@ -218,17 +237,19 @@ function ShopContent() {
           2 * 60 * 1000
         );
 
+        if (cancelled) return;
         if (error) throw error;
 
-        // Count without embeds (and without head) — more reliable through the REST shim
+        let total: number | null = null;
         if (isInitial) {
-          invalidateCachePrefix('shop:');
+          let countQuery = supabase.from('products').select('id', { count: 'exact' }).limit(1);
+          countQuery = applyShopFilters(countQuery, true);
+          const { count, error: countError } = await countQuery;
+          if (countError) console.warn('Shop count error:', countError);
+          if (typeof count === 'number' && count >= 0) total = count;
         }
-        let countQuery = supabase.from('products').select('id', { count: 'exact' }).limit(1);
-        countQuery = applyShopFilters(countQuery, true);
-        const { count, error: countError } = await countQuery;
-        if (countError) console.warn('Shop count error:', countError);
-        const total = typeof count === 'number' && count >= 0 ? count : null;
+
+        if (cancelled) return;
 
         if (Array.isArray(data)) {
           const formattedProducts = data.map(formatShopProduct);
@@ -241,29 +262,39 @@ function ShopContent() {
 
           if (total != null) {
             setTotalProducts(total);
-          } else {
+          } else if (!isInitial) {
             setTotalProducts((prev) => {
-              const loaded = isInitial
-                ? formattedProducts.length
-                : Math.max(prev, offset + formattedProducts.length);
-              // Full page with unknown total → keep scroll enabled
+              const loaded = offset + formattedProducts.length;
               if (formattedProducts.length >= productsPerPage) {
                 return Math.max(loaded + 1, prev);
               }
-              return loaded;
+              return Math.max(loaded, prev);
             });
+          } else {
+            setTotalProducts(
+              formattedProducts.length >= productsPerPage
+                ? formattedProducts.length + 1
+                : formattedProducts.length
+            );
           }
         }
       } catch (err) {
         console.error('Error fetching products:', err);
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
+        if (!cancelled) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     }
 
     fetchProducts();
-  }, [offset, filterSignature, categories, search, selectedCategory, priceRange, selectedRating, sortBy, featuredOnly, productsPerPage]);
+    return () => {
+      cancelled = true;
+    };
+    // categories intentionally omitted — read via ref so sidebar load doesn't jump the grid
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- products.length only gates skeleton; filterSignature covers filters
+  }, [offset, filterSignature]);
 
   const displayedTotal = Math.max(totalProducts, products.length);
   const hasMore = products.length > 0 && products.length < displayedTotal;
@@ -280,7 +311,7 @@ function ShopContent() {
 
   const loadNextPage = useCallback(() => {
     if (loading || loadingMore || !hasMore) return;
-    setOffset(prev => prev + productsPerPage);
+    setOffset((prev) => prev + productsPerPage);
   }, [loading, loadingMore, hasMore, productsPerPage]);
 
   useEffect(() => {
@@ -291,11 +322,11 @@ function ShopContent() {
       (entries) => {
         if (entries[0]?.isIntersecting) loadNextPage();
       },
-      { rootMargin: '240px', threshold: 0 }
+      { root: null, rootMargin: '120px 0px', threshold: 0 }
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [hasMore, loading, loadingMore, loadNextPage, products.length]);
+  }, [hasMore, loading, loadingMore, loadNextPage]);
 
   return (
     <main className="min-h-screen bg-white">
@@ -321,8 +352,8 @@ function ShopContent() {
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col lg:flex-row gap-8">
-            <aside className={`${isFilterOpen ? 'fixed inset-0 z-50 bg-white overflow-y-auto' : 'hidden'} lg:block lg:w-64 lg:flex-shrink-0`}>
-              <div className="lg:sticky lg:top-24">
+            <aside className={`${isFilterOpen ? 'fixed inset-0 z-50 bg-white overflow-y-auto' : 'hidden'} lg:block lg:w-64 lg:flex-shrink-0 lg:self-start`}>
+              <div className="lg:sticky lg:top-28 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:overscroll-contain">
                 <div className="bg-white lg:bg-transparent p-6 lg:p-0">
                   <div className="flex items-center justify-between mb-6 lg:hidden">
                     <h2 className="text-xl font-bold text-gray-900">Filters</h2>
@@ -534,8 +565,8 @@ function ShopContent() {
                 </div>
               </div>
 
-              {loading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 justify-items-center">
+              {loading && products.length === 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4">
                   {[...Array(8)].map((_, i) => (
                     <ProductCardSkeleton key={i} compact />
                   ))}
@@ -543,21 +574,23 @@ function ShopContent() {
               ) : (
                 <>
                   <div
-                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 justify-items-center"
+                    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-3 md:gap-4 items-stretch"
                     data-product-shop
                   >
-                    {products.map(product => (
-                      <ProductCard key={product.id} {...product} compact />
+                    {products.map((product) => (
+                      <div key={product.id} className="min-w-0 h-full">
+                        <ProductCard {...product} compact />
+                      </div>
                     ))}
                   </div>
 
-                  {products.length === 0 && (
+                  {!loading && products.length === 0 && (
                     <div className="text-center py-20">
                       <div className="w-20 h-20 flex items-center justify-center mx-auto mb-6 bg-gray-100 rounded-full">
                         <i className="ri-inbox-line text-4xl text-gray-400"></i>
                       </div>
                       <h3 className="text-2xl font-bold text-gray-900 mb-2">No Products Found</h3>
-                      <p className="text-gray-600 mb-8">Try adjusting your filters to find what you're looking for</p>
+                      <p className="text-gray-600 mb-8">Try adjusting your filters to find what you&apos;re looking for</p>
                       <button
                         onClick={() => {
                           setSelectedCategory('all');
@@ -571,15 +604,15 @@ function ShopContent() {
                     </div>
                   )}
 
-                  {!loading && hasMore && (
-                    <div ref={loadMoreRef} className="mt-10 flex justify-center py-4" aria-hidden="true">
+                  {hasMore && (
+                    <div ref={loadMoreRef} className="mt-8 flex justify-center py-6 min-h-[56px]" aria-hidden="true">
                       {loadingMore && (
                         <div className="w-10 h-10 border-4 border-blue-700 border-t-transparent rounded-full animate-spin" />
                       )}
                     </div>
                   )}
 
-                  {!loading && !hasMore && products.length > 0 && (
+                  {!loading && !loadingMore && !hasMore && products.length > 0 && (
                     <p className="mt-12 text-center text-sm text-gray-500">You&apos;ve seen all {displayedTotal} products</p>
                   )}
                 </>

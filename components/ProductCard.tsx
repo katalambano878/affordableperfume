@@ -106,19 +106,20 @@ export default function ProductCard({
   return (
     <div className="group relative w-full h-full">
       <div
-        className={`relative flex flex-col h-full w-full bg-white/80 backdrop-blur-xl border border-white/40 rounded-xl overflow-hidden transition-all duration-500 hover:shadow-[0_12px_24px_-10px_rgba(0,0,0,0.1)] hover:-translate-y-0.5 ${compact ? 'max-w-[220px] mx-auto' : 'max-w-[280px] mx-auto'}`}
+        className={`relative flex flex-col h-full w-full bg-white border border-gray-100 rounded-xl overflow-hidden transition-shadow duration-300 hover:shadow-md ${compact ? '' : 'max-w-[280px] mx-auto'}`}
       >
 
-        {/* Image Container with Overlay */}
+        {/* Image Container with Overlay — fixed aspect ratio prevents scroll jump */}
         <Link
           href={`/product/${slug}`}
-          className={`relative block overflow-hidden bg-gradient-to-b from-transparent to-gray-50/30 ${compact ? 'aspect-[5/6]' : 'aspect-square'}`}
+          className={`relative block shrink-0 overflow-hidden bg-gray-50 ${compact ? 'aspect-[4/5]' : 'aspect-square'}`}
         >
-          <div className="absolute inset-0 flex items-center justify-center p-1.5 sm:p-2 transition-transform duration-700 ease-out group-hover:scale-105 group-hover:-rotate-1">
+          <div className="absolute inset-0 p-2">
             <LazyImage
               src={image}
               alt={name}
-              className="w-full h-full object-contain drop-shadow-2xl transition-all duration-500"
+              className="w-full h-full"
+              imgClassName="object-contain"
             />
           </div>
 
@@ -180,74 +181,74 @@ export default function ProductCard({
           </button>
         </Link>
 
-        {/* Content Body */}
-        <div className="flex flex-col flex-grow px-2.5 sm:px-3 pb-2.5 sm:pb-3 pt-1.5 text-center">
-
-          {/* Origin Label */}
-          {origin && (
-            <div className="mb-2">
-              <span className="inline-block text-[10px] uppercase tracking-[0.2em] text-gray-400 border border-gray-100 rounded-full px-2 py-0.5 bg-white/50">
+        {/* Content Body — reserved heights keep rows aligned while scrolling */}
+        <div className={`flex flex-col flex-grow text-center ${compact ? 'px-2 pb-2 pt-1.5' : 'px-2.5 sm:px-3 pb-2.5 sm:pb-3 pt-1.5'}`}>
+          <div className={`mb-1 flex items-center justify-center ${compact ? 'min-h-[1.1rem]' : 'min-h-[1.5rem] mb-2'}`}>
+            {origin ? (
+              <span className="inline-block text-[10px] uppercase tracking-[0.15em] text-gray-400 border border-gray-100 rounded-full px-2 py-0.5 bg-white/50 truncate max-w-full">
                 {origin}
               </span>
-            </div>
-          )}
+            ) : null}
+          </div>
 
           <Link href={`/product/${slug}`} className="group/title">
             <h3
-              className={`font-serif text-ebony mb-0.5 group-hover/title:text-champagne-dark transition-colors leading-snug ${compact ? 'text-xs sm:text-sm line-clamp-2 min-h-[2.5rem]' : 'text-sm sm:text-base line-clamp-2'}`}
+              className={`font-serif text-ebony mb-1 group-hover/title:text-champagne-dark transition-colors leading-snug line-clamp-2 ${compact ? 'text-xs sm:text-sm min-h-[2.4rem]' : 'text-sm sm:text-base min-h-[2.75rem]'}`}
             >
               {name}
             </h3>
           </Link>
 
-          <div className="flex items-center justify-center space-x-2 mb-1.5">
+          <div className="flex items-center justify-center space-x-2 mb-1 min-h-[1.25rem]">
             <span className="text-ebony text-sm font-semibold">{formatPrice(displayPrice)}</span>
             {Number.isFinite(safeOriginal) && safeOriginal > displayPrice && (
               <span className="text-xs text-gray-400 line-through">{formatPrice(safeOriginal)}</span>
             )}
           </div>
 
-          {/* Color Swatches */}
-          {colorVariants.length > 0 && (
-            <div className="flex items-center justify-center gap-1.5 mb-2">
-              {colorVariants.slice(0, MAX_SWATCHES).map((color) => (
-                <button
-                  key={color.name}
-                  title={color.name}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setActiveColor(activeColor === color.name ? null : color.name);
-                  }}
-                  className={`w-3 h-3 rounded-full border transition-all duration-300 ${activeColor === color.name
-                    ? 'scale-125 ring-1 ring-offset-2 ring-champagne-gold'
-                    : 'hover:scale-125'
-                    } ${color.hex === '#FFFFFF' ? 'border-gray-300' : 'border-transparent'}`}
-                  style={{ backgroundColor: color.hex }}
-                />
-              ))}
-              {colorVariants.length > MAX_SWATCHES && (
-                <span className="text-[10px] text-gray-400">+{colorVariants.length - MAX_SWATCHES}</span>
-              )}
-            </div>
-          )}
+          <div className="flex items-center justify-center gap-1.5 mb-1 min-h-[0.85rem]">
+            {colorVariants.length > 0 ? (
+              <>
+                {colorVariants.slice(0, MAX_SWATCHES).map((color) => (
+                  <button
+                    key={color.name}
+                    type="button"
+                    title={color.name}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setActiveColor(activeColor === color.name ? null : color.name);
+                    }}
+                    className={`w-3 h-3 rounded-full border ${activeColor === color.name
+                      ? 'ring-1 ring-offset-1 ring-champagne-gold'
+                      : ''
+                      } ${color.hex === '#FFFFFF' ? 'border-gray-300' : 'border-transparent'}`}
+                    style={{ backgroundColor: color.hex }}
+                  />
+                ))}
+                {colorVariants.length > MAX_SWATCHES && (
+                  <span className="text-[10px] text-gray-400">+{colorVariants.length - MAX_SWATCHES}</span>
+                )}
+              </>
+            ) : null}
+          </div>
 
-          {/* Add to Cart (Minimalist) */}
-          <div className="mt-auto pt-1">
+          <div className="mt-auto pt-1 min-h-[2rem] flex items-end justify-center">
             {inStock ? (
               hasVariants ? (
                 <Link
                   href={`/product/${slug}`}
-                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony py-1.5 border-b border-gray-100 hover:border-ebony transition-all duration-300"
+                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony py-1.5 border-b border-gray-100 hover:border-ebony transition-colors"
                 >
                   Select Options
                 </Link>
               ) : (
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.preventDefault();
                     addToCart({ id, name, price, image, quantity: moq, slug, maxStock, moq });
                   }}
-                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony hover:text-champagne-dark py-1.5 border-b border-gray-100 hover:border-champagne-gold transition-all duration-300"
+                  className="w-full inline-block text-[10px] sm:text-xs uppercase tracking-widest font-bold text-gray-500 hover:text-ebony py-1.5 border-b border-gray-100 hover:border-champagne-gold transition-colors"
                 >
                   Add to Cart
                 </button>
