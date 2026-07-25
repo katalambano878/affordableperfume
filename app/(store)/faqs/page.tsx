@@ -52,7 +52,7 @@ export default function FAQsPage() {
     {
       category: 'shipping',
       question: 'How much does shipping cost?',
-      answer: 'Standard shipping costs GHS 20. Express delivery costs GHS 40. Orders over GHS 300 qualify for FREE standard shipping. Store pickup is also available at no charge from our main location.'
+      answer: 'Delivery across Ghana typically costs GHS 20–50 and takes 24–48 hours. For same-day express, arrange a rider through Yango, Uber, or Bolt Delivery. Store pickup may also be available.'
     },
     {
       category: 'shipping',
@@ -257,7 +257,7 @@ export default function FAQsPage() {
             </p>
           </Link>
 
-          <Link href="/returns" className="bg-gray-50 p-8 rounded-2xl hover:shadow-lg transition-all cursor-pointer">
+          <Link href="/contact" className="bg-gray-50 p-8 rounded-2xl hover:shadow-lg transition-all cursor-pointer">
             <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
               <i className="ri-arrow-go-back-line text-2xl text-blue-700"></i>
             </div>

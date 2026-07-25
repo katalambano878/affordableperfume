@@ -7,7 +7,7 @@ import ProductCard, { type ColorVariant } from '@/components/ProductCard';
 import ProductCardSkeleton from '@/components/skeletons/ProductCardSkeleton';
 import { getColorHex } from '@/components/ProductCard';
 import { supabase } from '@/lib/supabase';
-import { cachedQuery } from '@/lib/query-cache';
+import { cachedQuery, invalidateCachePrefix } from '@/lib/query-cache';
 import PageHero from '@/components/PageHero';
 
 function formatShopProduct(p: any) {
@@ -29,13 +29,17 @@ function formatShopProduct(p: any) {
     }
   }
 
+  const images = [...(p.product_images || [])].sort(
+    (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0)
+  );
+
   return {
     id: p.id,
     slug: p.slug,
     name: p.name,
     price: p.price,
     originalPrice: p.compare_at_price,
-    image: p.product_images?.[0]?.url || 'https://via.placeholder.com/800x800?text=No+Image',
+    image: images[0]?.url || 'https://via.placeholder.com/800x800?text=No+Image',
     rating: p.rating_avg || 0,
     reviewCount: 0,
     badge: p.compare_at_price > p.price ? 'Sale' : undefined,
@@ -121,52 +125,64 @@ function ShopContent() {
       if (isInitial) setLoading(true);
       else setLoadingMore(true);
       try {
-        const cacheKey = `shop:${filterSignature}:${offset}`;
+        const applyShopFilters = (query: any, forCount = false) => {
+          query = query
+            .eq('status', 'active')
+            .or('is_wholesale.is.null,is_wholesale.eq.false');
 
-        const { data, count, error } = await cachedQuery<{ data: any; count: any; error: any }>(
+          if (search) {
+            query = query.ilike('name', `%${search}%`);
+          }
+
+          if (selectedCategory !== 'all') {
+            const categoryObj = categories.find((c) => c.slug === selectedCategory);
+            if (categoryObj) {
+              const targetSlugs = [selectedCategory];
+              const childSlugs = categories
+                .filter((c) => c.parent_id === categoryObj.id)
+                .map((c) => c.slug);
+              targetSlugs.push(...childSlugs);
+              query = forCount
+                ? query.in('category_id', [
+                    categoryObj.id,
+                    ...categories.filter((c) => c.parent_id === categoryObj.id).map((c) => c.id),
+                  ])
+                : query.in('categories.slug', targetSlugs);
+            } else if (!forCount) {
+              query = query.eq('categories.slug', selectedCategory);
+            }
+          }
+
+          if (priceRange[1] < 5000) {
+            query = query.gte('price', priceRange[0]).lte('price', priceRange[1]);
+          }
+
+          if (selectedRating > 0) {
+            query = query.gte('rating_avg', selectedRating);
+          }
+
+          if (featuredOnly) {
+            query = query.eq('featured', true);
+          }
+
+          return query;
+        };
+
+        const cacheKey = `shop:v2:${filterSignature}:${offset}`;
+
+        const { data, error } = await cachedQuery<{ data: any; error: any }>(
           cacheKey,
           async () => {
             let query = supabase
               .from('products')
               .select(`
                 *,
-                categories!inner(name, slug),
-                product_images!product_id(url, position),
+                categories(name, slug),
+                product_images(url, position),
                 product_variants(id, name, price, quantity, option1, option2, image_url)
-              `, { count: 'exact' })
-              .or('is_wholesale.is.null,is_wholesale.eq.false')
-              .order('position', { foreignTable: 'product_images', ascending: true });
+              `);
 
-            if (search) {
-              query = query.ilike('name', `%${search}%`);
-            }
-
-            if (selectedCategory !== 'all') {
-              const categoryObj = categories.find(c => c.slug === selectedCategory);
-
-              if (categoryObj) {
-                const targetSlugs = [selectedCategory];
-                const childSlugs = categories
-                  .filter(c => c.parent_id === categoryObj.id)
-                  .map(c => c.slug);
-                targetSlugs.push(...childSlugs);
-                query = query.in('categories.slug', targetSlugs);
-              } else {
-                query = query.eq('categories.slug', selectedCategory);
-              }
-            }
-
-            if (priceRange[1] < 5000) {
-              query = query.gte('price', priceRange[0]).lte('price', priceRange[1]);
-            }
-
-            if (selectedRating > 0) {
-              query = query.gte('rating_avg', selectedRating);
-            }
-
-            if (featuredOnly) {
-              query = query.eq('featured', true);
-            }
+            query = applyShopFilters(query, false);
 
             switch (sortBy) {
               case 'price-low':
@@ -198,15 +214,37 @@ function ShopContent() {
 
         if (error) throw error;
 
+        // Separate head count — embed selects sometimes return count=0 via the shim
+        if (isInitial) {
+          invalidateCachePrefix('shop:');
+        }
+        let countQuery = supabase.from('products').select('id', { count: 'exact', head: true });
+        countQuery = applyShopFilters(countQuery, true);
+        const { count, error: countError } = await countQuery;
+        if (countError) console.warn('Shop count error:', countError);
+        const total = typeof count === 'number' ? count : 0;
+
         if (data) {
           const formattedProducts = data.map(formatShopProduct);
-          setTotalProducts(count || 0);
-          setProducts(prev => {
+          setProducts((prev) => {
             if (isInitial) return formattedProducts;
-            const ids = new Set(prev.map(p => p.id));
+            const ids = new Set(prev.map((p) => p.id));
             const next = formattedProducts.filter((p: { id: string }) => !ids.has(p.id));
             return [...prev, ...next];
           });
+
+          // Prefer real count; never show 0 when products are visible
+          if (total > 0) {
+            setTotalProducts(total);
+          } else if (isInitial) {
+            setTotalProducts(
+              formattedProducts.length < productsPerPage
+                ? formattedProducts.length
+                : formattedProducts.length + 1
+            );
+          } else {
+            setTotalProducts((prev) => Math.max(prev, offset + formattedProducts.length));
+          }
         }
       } catch (err) {
         console.error('Error fetching products:', err);

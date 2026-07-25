@@ -34,7 +34,7 @@ export default function ShippingPage() {
     <div className="min-h-screen bg-white">
       <PageHero
         title="Shipping & Delivery"
-        subtitle="Nationwide delivery in 24–48 hrs (GHS 20–50). Free standard shipping on orders over GHS 300."
+        subtitle="Nationwide delivery in 24–48 hrs (GHS 20–50)."
         image="shipping"
       />
 
@@ -58,16 +58,6 @@ export default function ShippingPage() {
               </div>
             ))}
           </div>
-        </div>
-
-        <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-8 mb-16 text-center">
-          <div className="w-16 h-16 bg-blue-700 rounded-full flex items-center justify-center mx-auto mb-4">
-            <i className="ri-gift-line text-3xl text-white"></i>
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-3">Free Standard Shipping</h3>
-          <p className="text-lg text-gray-600">
-            Spend GHS 300 or more and get <span className="font-bold text-blue-700">FREE standard delivery</span> anywhere in Ghana
-          </p>
         </div>
 
         <div className="mb-16">

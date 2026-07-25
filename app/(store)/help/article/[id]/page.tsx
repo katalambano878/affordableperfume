@@ -66,7 +66,7 @@ const articles: any = {
       
       <h3>Step 1: Start Your Return</h3>
       <ol>
-        <li>Go to the <a href="/returns">Returns Portal</a></li>
+        <li>Contact us via the <a href="/contact">Contact page</a></li>
         <li>Enter your order number and email</li>
         <li>Select the items you want to return</li>
         <li>Choose a return reason</li>

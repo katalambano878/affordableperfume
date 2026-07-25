@@ -329,7 +329,7 @@ function OrderSuccessContent() {
                 <i className="ri-question-line mr-1"></i>
                 Order Help
               </Link>
-              <Link href="/returns" className="text-blue-700 hover:text-blue-900 font-semibold whitespace-nowrap">
+              <Link href="/contact" className="text-blue-700 hover:text-blue-900 font-semibold whitespace-nowrap">
                 <i className="ri-arrow-left-right-line mr-1"></i>
                 Returns Policy
               </Link>

@@ -164,6 +164,40 @@ export default function AnalyticsPage() {
 
   const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+  const handleExport = () => {
+    const escape = (cell: string | number) => {
+      const value = String(cell ?? '');
+      if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+      return value;
+    };
+    const rows: (string | number)[][] = [
+      ['Metric', 'Value'],
+      ['Time Range', timeRange],
+      ['Total Revenue (GHS)', metrics.revenue.toFixed(2)],
+      ['Orders', metrics.orders],
+      ['Avg Order Value (GHS)', metrics.aov.toFixed(2)],
+      [],
+      ['Date', 'Sales (GHS)', 'Orders'],
+      ...salesData.map((d) => [d.date, Number(d.sales || 0).toFixed(2), d.orders || 0]),
+      [],
+      ['Top Product', 'Revenue (GHS)', 'Units'],
+      ...topProducts.map((p) => [p.name, Number(p.revenue || 0).toFixed(2), p.units || 0]),
+      [],
+      ['Category', 'Revenue (GHS)'],
+      ...categoryRevenue.map((c) => [c.name, Number(c.value || 0).toFixed(2)]),
+    ];
+    const csv = rows.map((row) => row.map(escape).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `analytics-${timeRange}-${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -183,7 +217,11 @@ export default function AnalyticsPage() {
               <option value="90days">Last 90 Days</option>
               <option value="year">This Year</option>
             </select>
-            <button className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer flex items-center justify-center">
+            <button
+              type="button"
+              onClick={handleExport}
+              className="bg-blue-700 hover:bg-blue-800 text-white px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer flex items-center justify-center"
+            >
               <i className="ri-download-line mr-2"></i>
               Export
             </button>
