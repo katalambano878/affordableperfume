@@ -81,7 +81,14 @@ export async function GET(
   const headers = new Headers(corsHeaders());
   headers.set("Content-Type", "application/json");
   if (result.count != null) {
-    headers.set("Content-Range", `0-${Math.max((Array.isArray(result.data) ? result.data.length : 1) - 1, 0)}/${result.count}`);
+    const isHead = req.headers.get("prefer")?.includes("head=true");
+    const rows = Array.isArray(result.data) ? result.data : result.data ? [result.data] : [];
+    // PostgREST uses */N for empty/head count responses — supabase-js parses the total from this.
+    if (isHead || rows.length === 0) {
+      headers.set("Content-Range", `*/${result.count}`);
+    } else {
+      headers.set("Content-Range", `0-${rows.length - 1}/${result.count}`);
+    }
   }
 
   if (preferSingle(req)) {

@@ -214,15 +214,15 @@ function ShopContent() {
 
         if (error) throw error;
 
-        // Separate head count — embed selects sometimes return count=0 via the shim
+        // Count without embeds (and without head) — more reliable through the REST shim
         if (isInitial) {
           invalidateCachePrefix('shop:');
         }
-        let countQuery = supabase.from('products').select('id', { count: 'exact', head: true });
+        let countQuery = supabase.from('products').select('id', { count: 'exact' }).limit(1);
         countQuery = applyShopFilters(countQuery, true);
         const { count, error: countError } = await countQuery;
         if (countError) console.warn('Shop count error:', countError);
-        const total = typeof count === 'number' ? count : 0;
+        const total = typeof count === 'number' && count >= 0 ? count : null;
 
         if (data) {
           const formattedProducts = data.map(formatShopProduct);
@@ -233,17 +233,19 @@ function ShopContent() {
             return [...prev, ...next];
           });
 
-          // Prefer real count; never show 0 when products are visible
-          if (total > 0) {
+          if (total != null) {
             setTotalProducts(total);
-          } else if (isInitial) {
-            setTotalProducts(
-              formattedProducts.length < productsPerPage
-                ? formattedProducts.length
-                : formattedProducts.length + 1
-            );
           } else {
-            setTotalProducts((prev) => Math.max(prev, offset + formattedProducts.length));
+            setTotalProducts((prev) => {
+              const loaded = isInitial
+                ? formattedProducts.length
+                : Math.max(prev, offset + formattedProducts.length);
+              // Full page with unknown total → keep scroll enabled
+              if (formattedProducts.length >= productsPerPage) {
+                return Math.max(loaded + 1, prev);
+              }
+              return loaded;
+            });
           }
         }
       } catch (err) {
@@ -257,7 +259,18 @@ function ShopContent() {
     fetchProducts();
   }, [offset, filterSignature, categories, search, selectedCategory, priceRange, selectedRating, sortBy, featuredOnly, productsPerPage]);
 
-  const hasMore = products.length > 0 && products.length < totalProducts;
+  const displayedTotal = Math.max(totalProducts, products.length);
+  const hasMore = products.length > 0 && products.length < displayedTotal;
+
+  const clearAllFilters = () => {
+    setSelectedCategory('all');
+    setPriceRange([0, 5000]);
+    setSelectedRating(0);
+    setFeaturedOnly(false);
+    setSortBy('popular');
+    setOffset(0);
+    setIsFilterOpen(false);
+  };
 
   const loadNextPage = useCallback(() => {
     if (loading || loadingMore || !hasMore) return;
@@ -295,7 +308,7 @@ function ShopContent() {
             <i className="ri-filter-3-line text-xl"></i>
             <span>Filters & Sort</span>
           </button>
-          <span className="text-sm text-gray-500">{totalProducts} Products</span>
+          <span className="text-sm text-gray-500">{displayedTotal} Products</span>
         </div>
       </div>
 
@@ -316,21 +329,44 @@ function ShopContent() {
                   </div>
 
                   <div className="space-y-8">
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="w-full border-2 border-gray-300 text-gray-800 py-2.5 rounded-lg font-semibold hover:bg-gray-50"
+                    >
+                      Clear all filters
+                    </button>
+
                     {/* Categories */}
                     <div>
                       <h3 className="font-semibold text-gray-900 mb-4">Categories</h3>
                       <div className="space-y-1">
                         <button
+                          type="button"
                           onClick={() => {
                             setSelectedCategory('all');
+                            setFeaturedOnly(false);
                             setIsFilterOpen(false);
                           }}
-                          className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${selectedCategory === 'all'
+                          className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${selectedCategory === 'all' && !featuredOnly
                             ? 'bg-blue-100 text-blue-700 font-medium'
                             : 'text-gray-700 hover:bg-gray-100'
                             }`}
                         >
                           All Perfumes
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedCategory('all');
+                            setFeaturedOnly(false);
+                            setSelectedRating(0);
+                            setPriceRange([0, 5000]);
+                            setIsFilterOpen(false);
+                          }}
+                          className="w-full text-left px-4 py-2 rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                        >
+                          None (reset filters)
                         </button>
 
                         {/* Parent Categories */}
@@ -406,9 +442,21 @@ function ShopContent() {
                     <div className="border-t border-gray-200 pt-8">
                       <h3 className="font-semibold text-gray-900 mb-4">Rating</h3>
                       <div className="space-y-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedRating(0)}
+                          className={`w-full text-left px-4 py-2 rounded-lg transition-colors ${
+                            selectedRating === 0
+                              ? 'bg-blue-100 text-blue-700 font-medium'
+                              : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          Any rating
+                        </button>
                         {[4, 3, 2, 1].map(rating => (
                           <button
                             key={rating}
+                            type="button"
                             onClick={() => {
                               setSelectedRating(rating === selectedRating ? 0 : rating);
                             }}
@@ -432,10 +480,8 @@ function ShopContent() {
                     </div>
 
                     <button
-                      onClick={() => {
-                        // Re-fetch handled by effect dependencies
-                        setIsFilterOpen(false);
-                      }}
+                      type="button"
+                      onClick={() => setIsFilterOpen(false)}
                       className="w-full bg-gray-900 hover:bg-blue-700 text-white py-3 rounded-lg font-medium transition-colors whitespace-nowrap"
                     >
                       Show Results
@@ -449,9 +495,18 @@ function ShopContent() {
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
                 <p className="text-gray-600">
                   Showing <span className="font-semibold text-gray-900">{products.length}</span> of{' '}
-                  <span className="font-semibold text-gray-900">{totalProducts}</span> products
+                  <span className="font-semibold text-gray-900">{displayedTotal}</span> products
                   {featuredOnly ? (
                     <span className="ml-2 text-blue-700 text-sm font-medium">· Featured</span>
+                  ) : null}
+                  {selectedCategory !== 'all' ? (
+                    <button
+                      type="button"
+                      onClick={clearAllFilters}
+                      className="ml-2 text-blue-700 text-sm font-medium underline"
+                    >
+                      Clear filters
+                    </button>
                   ) : null}
                 </p>
 
@@ -464,7 +519,7 @@ function ShopContent() {
                     }}
                     className="px-4 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm bg-white cursor-pointer"
                   >
-                    <option value="popular">Most Popular</option>
+                    <option value="popular">All (default)</option>
                     <option value="new">Newest</option>
                     <option value="price-low">Price: Low to High</option>
                     <option value="price-high">Price: High to Low</option>
@@ -519,7 +574,7 @@ function ShopContent() {
                   )}
 
                   {!loading && !hasMore && products.length > 0 && (
-                    <p className="mt-12 text-center text-sm text-gray-500">You&apos;ve seen all {totalProducts} products</p>
+                    <p className="mt-12 text-center text-sm text-gray-500">You&apos;ve seen all {displayedTotal} products</p>
                   )}
                 </>
               )}
