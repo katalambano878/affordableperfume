@@ -97,7 +97,7 @@ export default function MobileBottomNav() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex flex-col items-center justify-center py-2 transition-all duration-200 relative group active:scale-90 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset rounded-lg ${
+                  className={`flex flex-col items-center justify-center py-2 transition-all duration-200 relative group active:scale-90 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset rounded-lg select-none cursor-pointer ${
                     active ? 'text-blue-700' : 'text-gray-400'
                   }`}
                   aria-label={item.label}

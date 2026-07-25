@@ -85,7 +85,7 @@ export default function Header() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="group relative py-2 text-sm uppercase tracking-widest font-medium text-gray-900 transition-colors hover:text-gray-600"
+                    className="group relative py-2 text-sm uppercase tracking-widest font-medium text-gray-900 transition-colors hover:text-gray-600 select-none cursor-pointer"
                   >
                     {link.label}
                     <span className="absolute inset-x-0 bottom-0 h-px scale-x-0 bg-gray-900 transition-transform duration-300 ease-out group-hover:scale-x-100" />
@@ -230,7 +230,7 @@ export default function Header() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="block px-4 py-3 text-lg font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors"
+                  className="block px-4 py-3 text-lg font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-colors select-none cursor-pointer"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   {link.label}
@@ -245,7 +245,7 @@ export default function Header() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="block px-4 py-3 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors"
+                  className="block px-4 py-3 text-base font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 rounded-lg transition-colors select-none cursor-pointer"
                   onClick={() => setIsMobileMenuOpen(false)}
                 >
                   {link.label}

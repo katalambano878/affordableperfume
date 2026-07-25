@@ -373,10 +373,19 @@ img {
     user-select: none;
   }
   
-  /* Allow text selection in inputs and text content */
-  input, textarea, [contenteditable], p, span, h1, h2, h3, h4, h5, h6, li, td, th, label, a {
+  /* Allow text selection in inputs and text content (not nav links — avoids text caret on tap) */
+  input, textarea, [contenteditable], p, span, h1, h2, h3, h4, h5, h6, li, td, th, label {
     -webkit-user-select: text;
     user-select: text;
+  }
+
+  header a,
+  header button,
+  nav a,
+  nav button,
+  footer a {
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   /* Add safe area top padding for the sticky header */
