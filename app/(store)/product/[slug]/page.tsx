@@ -11,6 +11,7 @@ async function getProduct(slug: string) {
   const query = serverDb
     .from('products')
     .select('id, name, slug, description, short_description, price, compare_at_price, status, seo_title, seo_description, tags, metadata, rating_avg, product_images(url, position), categories(name, slug)')
+    .eq('status', 'active')
     .or('is_wholesale.is.null,is_wholesale.eq.false');
 
   const { data } = isUUID

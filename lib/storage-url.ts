@@ -1,4 +1,4 @@
-const PLACEHOLDER = 'https://via.placeholder.com/150';
+const PLACEHOLDER = '/images/product-placeholder.svg';
 
 /** Normalize product/storage paths saved at checkout into browser-loadable URLs. */
 export function resolveStorageUrl(url: string | undefined | null): string {

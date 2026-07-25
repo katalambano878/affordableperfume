@@ -85,11 +85,23 @@ export default function ProductCard({
   const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
   const isWishlisted = isInWishlist(id);
   const [activeColor, setActiveColor] = useState<string | null>(null);
-  const displayPrice = hasVariants && minVariantPrice ? minVariantPrice : price;
-  const discount = originalPrice ? Math.round((1 - displayPrice / originalPrice) * 100) : 0;
+  const safePrice = Number(price);
+  const safeMinVariant = minVariantPrice != null ? Number(minVariantPrice) : NaN;
+  const displayPrice =
+    hasVariants && Number.isFinite(safeMinVariant) && safeMinVariant > 0
+      ? safeMinVariant
+      : Number.isFinite(safePrice)
+        ? safePrice
+        : 0;
+  const safeOriginal = originalPrice != null ? Number(originalPrice) : NaN;
+  const discount =
+    Number.isFinite(safeOriginal) && safeOriginal > displayPrice
+      ? Math.round((1 - displayPrice / safeOriginal) * 100)
+      : 0;
   const MAX_SWATCHES = 4;
 
-  const formatPrice = (val: number) => `GH\u20B5${val.toFixed(2)}`;
+  const formatPrice = (val: number) =>
+    `GH\u20B5${(Number.isFinite(Number(val)) ? Number(val) : 0).toFixed(2)}`;
 
   return (
     <div className="group relative w-full h-full">
@@ -190,8 +202,8 @@ export default function ProductCard({
 
           <div className="flex items-center justify-center space-x-2 mb-1.5">
             <span className="text-ebony text-sm font-semibold">{formatPrice(displayPrice)}</span>
-            {originalPrice && (
-              <span className="text-xs text-gray-400 line-through">{formatPrice(originalPrice)}</span>
+            {Number.isFinite(safeOriginal) && safeOriginal > displayPrice && (
+              <span className="text-xs text-gray-400 line-through">{formatPrice(safeOriginal)}</span>
             )}
           </div>
 

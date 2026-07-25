@@ -10,6 +10,7 @@ import AnimatedSection, { AnimatedGrid } from '@/components/AnimatedSection';
 import NewsletterSection from '@/components/NewsletterSection';
 import { useCMS } from '@/context/CMSContext';
 import { usePageTitle } from '@/hooks/usePageTitle';
+import { PRODUCT_IMAGE_PLACEHOLDER, sortProductImages } from '@/lib/product-display';
 
 export default function Home() {
   usePageTitle('');
@@ -415,7 +416,9 @@ export default function Home() {
                     name={product.name}
                     price={product.price}
                     originalPrice={product.compare_at_price}
-                    image={product.product_images?.[0]?.url || 'https://via.placeholder.com/400x500'}
+                    image={
+                      sortProductImages(product.product_images)[0] || PRODUCT_IMAGE_PLACEHOLDER
+                    }
                     rating={product.rating_avg || 5}
                     reviewCount={product.review_count || 0}
                     badge={product.featured ? 'Featured' : undefined}

@@ -16,14 +16,38 @@ function OrderTrackingContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Auto-track if order number AND email are in the URL
+  // Auto-track from URL, or from logged-in session email when only order is provided
   const urlEmail = searchParams.get('email') || '';
-  
+
   useEffect(() => {
-    if (urlOrderNumber && urlEmail) {
-      setEmail(urlEmail);
-      fetchOrder(urlOrderNumber, urlEmail);
+    let cancelled = false;
+
+    async function autoTrack() {
+      if (!urlOrderNumber) return;
+
+      let emailToUse = urlEmail.trim();
+      if (emailToUse) {
+        setEmail(emailToUse);
+      } else {
+        try {
+          const { supabase } = await import('@/lib/supabase');
+          const { data: { session } } = await supabase.auth.getSession();
+          emailToUse = session?.user?.email || '';
+          if (emailToUse && !cancelled) setEmail(emailToUse);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      if (emailToUse && !cancelled) {
+        fetchOrder(urlOrderNumber, emailToUse);
+      }
     }
+
+    autoTrack();
+    return () => {
+      cancelled = true;
+    };
   }, [urlOrderNumber, urlEmail]);
 
   const fetchOrder = async (orderNum: string, verifyEmail?: string) => {

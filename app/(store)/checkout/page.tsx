@@ -18,9 +18,12 @@ export default function CheckoutPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [checkoutType, setCheckoutType] = useState<'guest' | 'account'>('guest');
-  const [saveAddress, setSaveAddress] = useState(false);
+  const [saveAddress, setSaveAddress] = useState(true);
   const [savePayment, setSavePayment] = useState(false);
   const [user, setUser] = useState<any>(null);
+  const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>('');
+  const [addressPrefillDone, setAddressPrefillDone] = useState(false);
   const { getToken, verifying } = useRecaptcha();
 
   const [shippingData, setShippingData] = useState({
@@ -32,6 +35,29 @@ export default function CheckoutPage() {
     city: '',
     region: ''
   });
+
+  const splitName = (fullName: string | null | undefined) => {
+    const parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+    return {
+      firstName: parts[0] || '',
+      lastName: parts.slice(1).join(' '),
+    };
+  };
+
+  const applySavedAddress = (row: any, emailFallback?: string) => {
+    const { firstName, lastName } = splitName(row.full_name);
+    setShippingData((prev) => ({
+      ...prev,
+      firstName: firstName || prev.firstName,
+      lastName: lastName || prev.lastName,
+      email: emailFallback || prev.email,
+      phone: row.phone || prev.phone,
+      address: row.address_line1 || row.address || prev.address,
+      city: row.city || prev.city,
+      region: row.state || row.region || prev.region,
+    }));
+    if (row.id) setSelectedAddressId(row.id);
+  };
 
   // Ghana Regions for dropdown
   const ghanaRegions = [
@@ -60,27 +86,125 @@ export default function CheckoutPage() {
 
 
 
-  // Check auth and cart
+  // Check auth, load saved address book + profile, prefill shipping
   useEffect(() => {
-    async function checkUser() {
+    async function checkUserAndPrefill() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        setUser(session.user);
-        setCheckoutType('account'); // Auto-select account checkout if logged in
-        // Pre-fill email if available
-        setShippingData(prev => ({ ...prev, email: session.user.email || '' }));
+      if (!session?.user) {
+        setAddressPrefillDone(true);
+        return;
       }
-    }
-    checkUser();
 
-    // Small delay to ensure cart load
-    const timer = setTimeout(() => {
-      if (cart.length === 0 && !isLoading) {
-        // router.push('/cart'); // Optional: redirect if empty
+      setUser(session.user);
+      setCheckoutType('account');
+      const email = session.user.email || '';
+
+      setShippingData((prev) => ({ ...prev, email: prev.email || email }));
+
+      // 1) Address book (default first)
+      const { data: addresses } = await supabase
+        .from('addresses')
+        .select('*')
+        .eq('user_id', session.user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (addresses?.length) {
+        setSavedAddresses(addresses);
+        applySavedAddress(addresses[0], email);
+        setAddressPrefillDone(true);
+        return;
       }
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [cart, router, isLoading]);
+
+      // 2) Profile name/phone
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('full_name, phone, email')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      // 3) Customer record / last order shipping address
+      let customer: any = null;
+      const { data: customerByUser } = await supabase
+        .from('customers')
+        .select('first_name, last_name, phone, email, default_address')
+        .eq('user_id', session.user.id)
+        .limit(1)
+        .maybeSingle();
+      customer = customerByUser;
+      if (!customer && email) {
+        const { data: customerByEmail } = await supabase
+          .from('customers')
+          .select('first_name, last_name, phone, email, default_address')
+          .ilike('email', email)
+          .limit(1)
+          .maybeSingle();
+        customer = customerByEmail;
+      }
+
+      let lastOrder: any = null;
+      const { data: orderByUser } = await supabase
+        .from('orders')
+        .select('shipping_address, phone, email')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      lastOrder = orderByUser;
+      if (!lastOrder && email) {
+        const { data: orderByEmail } = await supabase
+          .from('orders')
+          .select('shipping_address, phone, email')
+          .ilike('email', email)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        lastOrder = orderByEmail;
+      }
+
+      const lastShip = (lastOrder?.shipping_address || {}) as Record<string, any>;
+      const defaultAddr = (customer?.default_address || {}) as Record<string, any>;
+      const nameFromProfile = splitName(profile?.full_name);
+      const nameFromCustomer = {
+        firstName: customer?.first_name || '',
+        lastName: customer?.last_name || '',
+      };
+
+      setShippingData((prev) => ({
+        firstName:
+          lastShip.firstName ||
+          defaultAddr.firstName ||
+          nameFromCustomer.firstName ||
+          nameFromProfile.firstName ||
+          prev.firstName,
+        lastName:
+          lastShip.lastName ||
+          defaultAddr.lastName ||
+          nameFromCustomer.lastName ||
+          nameFromProfile.lastName ||
+          prev.lastName,
+        email: email || lastOrder?.email || customer?.email || prev.email,
+        phone:
+          lastShip.phone ||
+          defaultAddr.phone ||
+          customer?.phone ||
+          profile?.phone ||
+          lastOrder?.phone ||
+          prev.phone,
+        address:
+          lastShip.address ||
+          defaultAddr.address ||
+          defaultAddr.address_line1 ||
+          prev.address,
+        city: lastShip.city || defaultAddr.city || prev.city,
+        region: lastShip.region || defaultAddr.region || defaultAddr.state || prev.region,
+      }));
+
+      setAddressPrefillDone(true);
+    }
+
+    checkUserAndPrefill();
+  }, []);
 
   // Scroll to top when step changes
   useEffect(() => {
@@ -250,6 +374,46 @@ export default function CheckoutPage() {
         p_address: shippingData
       });
 
+      // 3b. Persist address book for logged-in users (checkbox or first-time save)
+      if (user?.id && (saveAddress || savedAddresses.length === 0)) {
+        try {
+          const addressPayload = {
+            user_id: user.id,
+            type: 'shipping',
+            label: 'Home',
+            full_name: fullName || 'Customer',
+            phone: shippingData.phone,
+            address_line1: shippingData.address,
+            address_line2: null,
+            city: shippingData.city,
+            state: shippingData.region || 'Greater Accra',
+            postal_code: '00000',
+            country: 'Ghana',
+            is_default: true,
+            updated_at: new Date().toISOString(),
+          };
+
+          await supabase
+            .from('addresses')
+            .update({ is_default: false })
+            .eq('user_id', user.id);
+
+          if (selectedAddressId) {
+            await supabase
+              .from('addresses')
+              .update(addressPayload)
+              .eq('id', selectedAddressId)
+              .eq('user_id', user.id);
+          } else {
+            await supabase.from('addresses').insert([
+              { ...addressPayload, created_at: new Date().toISOString() },
+            ]);
+          }
+        } catch (addrErr) {
+          console.warn('Could not save address book entry:', addrErr);
+        }
+      }
+
       // 4. Handle Payment Redirects or Completion
       if (paymentMethod === 'moolre') {
         try {
@@ -393,6 +557,73 @@ export default function CheckoutPage() {
               <>
                 <div className="bg-white rounded-xl shadow-sm p-6 mb-6">
                   <h2 className="text-xl font-bold text-gray-900 mb-6">Shipping Information</h2>
+
+                  {user && savedAddresses.length > 0 && (
+                    <div className="mb-6 p-4 rounded-xl border-2 border-blue-100 bg-blue-50/60">
+                      <p className="text-sm font-semibold text-blue-900 mb-3">
+                        Saved addresses
+                      </p>
+                      <div className="space-y-2">
+                        {savedAddresses.map((addr) => (
+                          <label
+                            key={addr.id}
+                            className={`flex items-start gap-3 p-3 rounded-lg border-2 cursor-pointer bg-white transition-colors ${
+                              selectedAddressId === addr.id
+                                ? 'border-blue-700'
+                                : 'border-gray-200 hover:border-gray-300'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="saved-address"
+                              checked={selectedAddressId === addr.id}
+                              onChange={() => applySavedAddress(addr, user.email)}
+                              className="mt-1 w-4 h-4 text-blue-700"
+                            />
+                            <div className="min-w-0">
+                              <p className="font-medium text-gray-900">
+                                {addr.full_name}
+                                {addr.is_default ? (
+                                  <span className="ml-2 text-xs font-semibold text-blue-700">Default</span>
+                                ) : null}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                {addr.address_line1}, {addr.city}
+                                {addr.state ? `, ${addr.state}` : ''}
+                              </p>
+                              <p className="text-sm text-gray-500">{addr.phone}</p>
+                            </div>
+                          </label>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedAddressId('');
+                            setShippingData((prev) => ({
+                              ...prev,
+                              firstName: '',
+                              lastName: '',
+                              phone: '',
+                              address: '',
+                              city: '',
+                              region: '',
+                              email: user.email || prev.email,
+                            }));
+                          }}
+                          className="text-sm font-semibold text-blue-700 hover:underline pt-1"
+                        >
+                          Use a different address
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {user && !addressPrefillDone && (
+                    <p className="text-sm text-gray-500 mb-4 flex items-center gap-2">
+                      <i className="ri-loader-4-line animate-spin" />
+                      Loading your saved details…
+                    </p>
+                  )}
 
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

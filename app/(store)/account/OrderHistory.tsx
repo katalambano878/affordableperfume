@@ -2,8 +2,21 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { resolveStorageUrl } from '@/lib/storage-url';
+import { useCart } from '@/context/CartContext';
+
+interface OrderItem {
+  id: string;
+  productId?: string | null;
+  name: string;
+  image: string;
+  quantity: number;
+  price: number;
+  variant?: string;
+  slug?: string;
+}
 
 interface Order {
   id: string;
@@ -11,19 +24,18 @@ interface Order {
   date: string;
   status: string;
   paymentStatus?: string;
+  email?: string;
   total: number;
-  items: {
-    id: string;
-    name: string;
-    image: string;
-    quantity: number;
-    price: number;
-  }[];
+  items: OrderItem[];
 }
 
 export default function OrderHistory() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState('');
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const { addToCart, setIsCartOpen } = useCart();
+  const router = useRouter();
 
   useEffect(() => {
     async function fetchOrders() {
@@ -31,7 +43,9 @@ export default function OrderHistory() {
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) return;
 
-        const userEmail = session.user.email?.toLowerCase();
+        const email = session.user.email?.toLowerCase() || '';
+        setUserEmail(email);
+
         const { data: byUserId, error: userIdError } = await supabase
           .from('orders')
           .select(`*, order_items (*)`)
@@ -42,12 +56,11 @@ export default function OrderHistory() {
 
         let merged = byUserId || [];
 
-        // Include guest checkout orders placed with the same email
-        if (userEmail) {
+        if (email) {
           const { data: byEmail, error: emailError } = await supabase
             .from('orders')
             .select(`*, order_items (*)`)
-            .ilike('email', userEmail)
+            .ilike('email', email)
             .order('created_at', { ascending: false });
 
           if (emailError) throw emailError;
@@ -69,14 +82,18 @@ export default function OrderHistory() {
             date: order.created_at,
             status: order.status,
             paymentStatus: order.payment_status,
+            email: order.email || email,
             total: order.total,
             items: (order.order_items || []).map((item: any) => ({
               id: item.id,
+              productId: item.product_id,
               name: item.product_name,
               image: resolveStorageUrl(item.metadata?.image),
               quantity: item.quantity,
-              price: item.unit_price
-            }))
+              price: item.unit_price,
+              variant: item.variant_name || undefined,
+              slug: item.metadata?.slug || undefined,
+            })),
           }));
           setOrders(formattedOrders);
         }
@@ -100,20 +117,119 @@ export default function OrderHistory() {
         return 'bg-yellow-100 text-yellow-700';
       case 'cancelled':
         return 'bg-red-100 text-red-700';
-      default: // pending
+      default:
         return 'bg-gray-100 text-gray-700';
     }
   };
 
-  const handleReorder = (order: Order) => {
-    // Implement reorder logic (add items back to cart)
-    console.log('Reordering:', order);
-    alert('Reorder feature coming soon!');
+  const trackHref = (order: Order) => {
+    const email = encodeURIComponent(order.email || userEmail || '');
+    const base = `/order-tracking?order=${encodeURIComponent(order.orderNumber)}`;
+    return email ? `${base}&email=${email}` : base;
+  };
+
+  const helpHref = (order: Order) =>
+    `/contact?order=${encodeURIComponent(order.orderNumber)}&subject=${encodeURIComponent(
+      `Help with order ${order.orderNumber}`
+    )}`;
+
+  const handleReorder = async (order: Order) => {
+    if (!order.items.length) {
+      alert('This order has no items to reorder.');
+      return;
+    }
+
+    setReorderingId(order.id);
+    try {
+      const productIds = order.items
+        .map((item) => item.productId)
+        .filter((id): id is string => !!id);
+
+      const productMap = new Map<string, any>();
+      if (productIds.length > 0) {
+        const { data: products } = await supabase
+          .from('products')
+          .select('id, slug, name, price, quantity, status, product_images(url, position)')
+          .in('id', productIds);
+
+        for (const p of products || []) {
+          productMap.set(p.id, p);
+        }
+      }
+
+      let added = 0;
+      const unavailable: string[] = [];
+
+      for (const item of order.items) {
+        const product = item.productId ? productMap.get(item.productId) : null;
+
+        if (product && product.status !== 'active') {
+          unavailable.push(item.name);
+          continue;
+        }
+
+        const stock = product?.quantity ?? 9999;
+        if (product && stock <= 0) {
+          unavailable.push(item.name);
+          continue;
+        }
+
+        const images = [...(product?.product_images || [])].sort(
+          (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0)
+        );
+        const image =
+          images[0]?.url ||
+          item.image ||
+          '/images/product-placeholder.svg';
+
+        const productId = product?.id || item.productId;
+        if (!productId) {
+          unavailable.push(item.name);
+          continue;
+        }
+
+        const qty = Math.min(item.quantity || 1, stock > 0 ? stock : item.quantity || 1);
+
+        addToCart({
+          id: productId,
+          name: product?.name || item.name,
+          price: Number(product?.price ?? item.price),
+          image: resolveStorageUrl(image),
+          quantity: qty,
+          variant: item.variant,
+          slug: product?.slug || item.slug || productId,
+          maxStock: stock > 0 ? stock : 9999,
+          moq: 1,
+        });
+        added += 1;
+      }
+
+      if (added === 0) {
+        alert(
+          unavailable.length
+            ? `Could not reorder: ${unavailable.join(', ')} ${unavailable.length === 1 ? 'is' : 'are'} unavailable.`
+            : 'Could not add items to your cart.'
+        );
+        return;
+      }
+
+      setIsCartOpen(true);
+      if (unavailable.length) {
+        alert(
+          `Added ${added} item(s) to your cart. Unavailable: ${unavailable.join(', ')}.`
+        );
+      }
+      router.push('/cart');
+    } catch (err) {
+      console.error('Reorder failed:', err);
+      alert('Could not reorder. Please try again.');
+    } finally {
+      setReorderingId(null);
+    }
   };
 
   const handleDownloadInvoice = (orderId: string) => {
-    console.log('Downloading invoice for order:', orderId);
-    alert('Invoice download coming soon!');
+    window.open(`/account/invoice/${orderId}?print=true`, '_blank', 'noopener,noreferrer');
   };
 
   if (loading) {
@@ -200,6 +316,9 @@ export default function OrderHistory() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <h4 className="font-semibold text-gray-900 mb-1">{item.name}</h4>
+                      {item.variant && (
+                        <p className="text-sm text-gray-500">{item.variant}</p>
+                      )}
                       <p className="text-sm text-gray-600">Quantity: {item.quantity}</p>
                       <p className="text-sm font-bold text-gray-900 mt-1">GH₵{item.price.toFixed(2)}</p>
                     </div>
@@ -209,20 +328,23 @@ export default function OrderHistory() {
 
               <div className="flex flex-col sm:flex-row flex-wrap gap-3 pt-4 border-t border-gray-200">
                 <Link
-                  href={`/order-tracking?order=${order.orderNumber}`}
+                  href={trackHref(order)}
                   className="flex-1 sm:flex-none text-center px-4 py-2 bg-blue-700 text-white rounded-lg font-semibold hover:bg-blue-800 transition-colors whitespace-nowrap"
                 >
                   <i className="ri-map-pin-line mr-2"></i>
                   Track Order
                 </Link>
                 <button
+                  type="button"
                   onClick={() => handleReorder(order)}
-                  className="flex-1 sm:flex-none px-4 py-2 border-2 border-gray-300 text-gray-900 rounded-lg font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap"
+                  disabled={reorderingId === order.id}
+                  className="flex-1 sm:flex-none px-4 py-2 border-2 border-gray-300 text-gray-900 rounded-lg font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap disabled:opacity-50"
                 >
-                  <i className="ri-refresh-line mr-2"></i>
-                  Reorder
+                  <i className={`${reorderingId === order.id ? 'ri-loader-4-line animate-spin' : 'ri-refresh-line'} mr-2`}></i>
+                  {reorderingId === order.id ? 'Adding…' : 'Reorder'}
                 </button>
                 <button
+                  type="button"
                   onClick={() => handleDownloadInvoice(order.id)}
                   className="flex-1 sm:flex-none px-4 py-2 border-2 border-gray-300 text-gray-900 rounded-lg font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
@@ -230,7 +352,7 @@ export default function OrderHistory() {
                   Invoice
                 </button>
                 <Link
-                  href="/contact"
+                  href={helpHref(order)}
                   className="flex-1 sm:flex-none text-center px-4 py-2 border-2 border-gray-300 text-gray-900 rounded-lg font-semibold hover:bg-gray-50 transition-colors whitespace-nowrap"
                 >
                   <i className="ri-customer-service-line mr-2"></i>

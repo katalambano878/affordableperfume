@@ -1,24 +1,17 @@
-// Store Service Worker v2.0
-const CACHE_VERSION = 'sl-v2.0';
+// Store Service Worker v2.2
+const CACHE_VERSION = 'sl-v2.2';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
-const DYNAMIC_CACHE = `dynamic-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
 
-// Core app shell files to pre-cache
+// Only offline shell — never pre-cache HTML routes (stale shells break after deploys)
 const STATIC_ASSETS = [
-  '/',
-  '/shop',
-  '/cart',
-  '/wishlist',
-  '/account',
-  '/categories',
   '/offline',
   '/logo.png',
+  '/images/product-placeholder.svg',
 ];
 
 // Cache size limits
-const DYNAMIC_CACHE_LIMIT = 50;
 const IMAGE_CACHE_LIMIT = 100;
 const API_CACHE_LIMIT = 30;
 
@@ -34,7 +27,7 @@ async function trimCache(cacheName, maxItems) {
 
 // Install: pre-cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing v2.0...');
+  console.log('[SW] Installing v2.2...');
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -51,13 +44,13 @@ self.addEventListener('install', (event) => {
 
 // Activate: clean old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating v2.0...');
+  console.log('[SW] Activating v2.2...');
   event.waitUntil(
     caches.keys()
       .then((keys) => {
         return Promise.all(
           keys
-            .filter((key) => key !== STATIC_CACHE && key !== DYNAMIC_CACHE && key !== IMAGE_CACHE && key !== API_CACHE)
+            .filter((key) => key !== STATIC_CACHE && key !== IMAGE_CACHE && key !== API_CACHE)
             .map((key) => {
               console.log('[SW] Removing old cache:', key);
               return caches.delete(key);
@@ -83,8 +76,28 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/payment')) return;
   if (url.pathname.startsWith('/api/notifications')) return;
 
+  // Never intercept HTML / RSC / data — stale document cache causes
+  // "Application error: a client-side exception has occurred" after deploys
+  if (
+    request.mode === 'navigate' ||
+    request.destination === 'document' ||
+    (request.headers.get('accept') || '').includes('text/html') ||
+    url.pathname.startsWith('/_next/data')
+  ) {
+    event.respondWith(
+      fetch(request).catch(() => caches.match('/offline'))
+    );
+    return;
+  }
+
   // Skip admin routes
   if (url.pathname.startsWith('/admin')) return;
+
+  // Same-origin product uploads — network only (cache-first caused stale "Image unavailable" placeholders)
+  if (url.origin === self.location.origin && url.pathname.startsWith('/storage/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
 
   // Strategy: Images - Cache First (long-lived)
   if (
@@ -162,43 +175,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Strategy: Pages - Network First with cache fallback
-  if (request.mode === 'navigate' || request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const responseClone = response.clone();
-            caches.open(DYNAMIC_CACHE).then((cache) => {
-              cache.put(request, responseClone);
-              trimCache(DYNAMIC_CACHE, DYNAMIC_CACHE_LIMIT);
-            });
-          }
-          return response;
-        })
-        .catch(() => {
-          return caches.match(request).then((cached) => {
-            return cached || caches.match('/offline');
-          });
-        })
-    );
-    return;
-  }
-
-  // Default: Network First
-  event.respondWith(
-    fetch(request)
-      .then((response) => {
-        if (response.ok) {
-          const responseClone = response.clone();
-          caches.open(DYNAMIC_CACHE).then((cache) => {
-            cache.put(request, responseClone);
-          });
-        }
-        return response;
-      })
-      .catch(() => caches.match(request))
-  );
+  // Default: network only (do not cache arbitrary responses)
+  event.respondWith(fetch(request));
 });
 
 // Background sync for offline actions

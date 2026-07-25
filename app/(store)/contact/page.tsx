@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useCMS } from '@/context/CMSContext';
 import { supabase } from '@/lib/supabase';
 import PageHero from '@/components/PageHero';
 import { usePageTitle } from '@/hooks/usePageTitle';
 import { useRecaptcha } from '@/hooks/useRecaptcha';
 
-export default function ContactPage() {
+function ContactForm() {
   usePageTitle('Contact Us');
+  const searchParams = useSearchParams();
   const { getSetting } = useCMS();
   const [pageContent, setPageContent] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -37,6 +39,38 @@ export default function ContactPage() {
     }
     fetchContactContent();
   }, []);
+
+  useEffect(() => {
+    const order = searchParams.get('order') || '';
+    const subjectParam = searchParams.get('subject') || '';
+    const subject = subjectParam || (order ? `Help with order ${order}` : '');
+    const message = order
+      ? `Hi, I need help with order ${order}.\n\n`
+      : '';
+
+    if (subject || message) {
+      setFormData((prev) => ({
+        ...prev,
+        subject: prev.subject || subject,
+        message: prev.message || message,
+      }));
+    }
+
+    async function prefillUser() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+      setFormData((prev) => ({
+        ...prev,
+        email: prev.email || session.user.email || '',
+        name:
+          prev.name ||
+          (session.user.user_metadata?.full_name as string) ||
+          (session.user.user_metadata?.name as string) ||
+          '',
+      }));
+    }
+    prefillUser();
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -346,5 +380,19 @@ export default function ContactPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ContactPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[40vh] flex items-center justify-center">
+          <i className="ri-loader-4-line animate-spin text-3xl text-blue-700" />
+        </div>
+      }
+    >
+      <ContactForm />
+    </Suspense>
   );
 }

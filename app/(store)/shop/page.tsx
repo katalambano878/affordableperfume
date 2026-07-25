@@ -8,18 +8,19 @@ import ProductCardSkeleton from '@/components/skeletons/ProductCardSkeleton';
 import { getColorHex } from '@/components/ProductCard';
 import { supabase } from '@/lib/supabase';
 import { cachedQuery, invalidateCachePrefix } from '@/lib/query-cache';
+import {
+  getProductCommerce,
+  PRODUCT_IMAGE_PLACEHOLDER,
+  sortProductImages,
+} from '@/lib/product-display';
 import PageHero from '@/components/PageHero';
 
 function formatShopProduct(p: any) {
-  const variants = p.product_variants || [];
-  const hasVariants = variants.length > 0;
-  const minVariantPrice = hasVariants ? Math.min(...variants.map((v: any) => v.price || p.price)) : undefined;
-  const totalVariantStock = hasVariants ? variants.reduce((sum: number, v: any) => sum + (v.quantity || 0), 0) : 0;
-  const effectiveStock = hasVariants ? totalVariantStock : p.quantity;
+  const variants = Array.isArray(p?.product_variants) ? p.product_variants : [];
   const colorVariants: ColorVariant[] = [];
   const seenColors = new Set<string>();
   for (const v of variants) {
-    const colorName = v.option2;
+    const colorName = typeof v?.option2 === 'string' ? v.option2 : '';
     if (colorName && !seenColors.has(colorName.toLowerCase().trim())) {
       const hex = getColorHex(colorName);
       if (hex) {
@@ -29,26 +30,31 @@ function formatShopProduct(p: any) {
     }
   }
 
-  const images = [...(p.product_images || [])].sort(
-    (a: any, b: any) => (a.position ?? 0) - (b.position ?? 0)
+  const images = sortProductImages(Array.isArray(p?.product_images) ? p.product_images : []);
+  const price = Number(p?.price);
+  const compareAt = Number(p?.compare_at_price);
+  const commerce = getProductCommerce(
+    Number.isFinite(price) ? price : 0,
+    Number(p?.quantity) || 0,
+    variants
   );
 
   return {
     id: p.id,
-    slug: p.slug,
-    name: p.name,
-    price: p.price,
-    originalPrice: p.compare_at_price,
-    image: images[0]?.url || 'https://via.placeholder.com/800x800?text=No+Image',
-    rating: p.rating_avg || 0,
+    slug: p.slug || p.id,
+    name: p.name || 'Product',
+    price: Number.isFinite(price) ? price : 0,
+    originalPrice: Number.isFinite(compareAt) && compareAt > 0 ? compareAt : undefined,
+    image: images[0] || PRODUCT_IMAGE_PLACEHOLDER,
+    rating: Number(p.rating_avg) || 0,
     reviewCount: 0,
-    badge: p.compare_at_price > p.price ? 'Sale' : undefined,
-    inStock: effectiveStock > 0,
-    maxStock: effectiveStock || 50,
+    badge: Number.isFinite(compareAt) && compareAt > price ? 'Sale' : undefined,
+    inStock: commerce.inStock,
+    maxStock: commerce.effectiveStock || 50,
     moq: p.moq || 1,
     category: p.categories?.name,
-    hasVariants,
-    minVariantPrice,
+    hasVariants: commerce.hasVariants,
+    minVariantPrice: commerce.minVariantPrice,
     colorVariants,
     notes: p.metadata?.scent_notes,
     origin: p.metadata?.origin,
@@ -224,7 +230,7 @@ function ShopContent() {
         if (countError) console.warn('Shop count error:', countError);
         const total = typeof count === 'number' && count >= 0 ? count : null;
 
-        if (data) {
+        if (Array.isArray(data)) {
           const formattedProducts = data.map(formatShopProduct);
           setProducts((prev) => {
             if (isInitial) return formattedProducts;

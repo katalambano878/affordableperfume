@@ -1,10 +1,16 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
+import LazyImage from '@/components/LazyImage';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { cachedQuery } from '@/lib/query-cache';
+import {
+  getProductCommerce,
+  PRODUCT_IMAGE_PLACEHOLDER,
+  sortProductImages,
+  resolveProductImageUrl,
+} from '@/lib/product-display';
 import ProductCard from '@/components/ProductCard';
 import ProductReviews from '@/components/ProductReviews';
 import { StructuredData, generateProductSchema, generateBreadcrumbSchema } from '@/components/SEOHead';
@@ -64,7 +70,8 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 categories(name),
                 product_variants(*),
                 product_images(url, position, alt_text)
-              `);
+              `)
+              .eq('status', 'active');
 
             const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
 
@@ -105,7 +112,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
         const transformedProduct = {
           ...productData,
-          images: productData.product_images?.sort((a: any, b: any) => a.position - b.position).map((img: any) => img.url) || [],
+          images: sortProductImages(productData.product_images),
           category: productData.categories?.name || 'Shop',
           rating: productData.rating_avg || 0,
           reviewCount: 0,
@@ -123,7 +130,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
 
         // Ensure at least one image/placeholder
         if (transformedProduct.images.length === 0) {
-          transformedProduct.images = ['https://via.placeholder.com/800x800?text=No+Image'];
+          transformedProduct.images = [PRODUCT_IMAGE_PLACEHOLDER];
         }
 
         setProduct(transformedProduct);
@@ -143,12 +150,16 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         if (productData.category_id) {
           const { data: related } = await cachedQuery<{ data: any; error: any }>(
             `related:${productData.category_id}:${productData.id}`,
-            (() => supabase
-              .from('products')
-              .select('*, product_images(url, position), product_variants(id, name, price, quantity)')
-              .eq('category_id', productData.category_id)
-              .neq('id', productData.id)
-              .limit(4)) as any,
+            async () => {
+              const result = await supabase
+                .from('products')
+                .select('*, product_images(url, position), product_variants(id, name, price, quantity)')
+                .eq('status', 'active')
+                .eq('category_id', productData.category_id)
+                .neq('id', productData.id)
+                .limit(4);
+              return result;
+            },
             5 * 60 * 1000
           );
 
@@ -164,7 +175,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 slug: p.slug,
                 name: p.name,
                 price: p.price,
-                image: p.product_images?.[0]?.url || 'https://via.placeholder.com/800?text=No+Image',
+                image: sortProductImages(p.product_images)[0] || PRODUCT_IMAGE_PLACEHOLDER,
                 rating: p.rating_avg || 0,
                 reviewCount: 0,
                 inStock: effectiveStock > 0,
@@ -191,14 +202,18 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     }
   }, [slug]);
 
-  const hasVariants = product?.variants?.length > 0;
+  const commerce = product
+    ? getProductCommerce(product.price, product.stockCount, product.variants, selectedVariant)
+    : null;
+  const hasVariants = commerce?.hasVariants ?? false;
   const hasColors = product?.colors?.length > 0;
   const needsVariantSelection = hasVariants && !selectedVariant;
   const needsColorSelection = hasColors && !selectedColor;
 
-  // Determine the active price: variant price if selected, otherwise base price
-  const activePrice = selectedVariant?.price ?? product?.price ?? 0;
-  const activeStock = selectedVariant ? (selectedVariant.stock ?? selectedVariant.quantity ?? product?.stockCount ?? 0) : (product?.stockCount ?? 0);
+  const activePrice = commerce?.activePrice ?? 0;
+  const activeStock = commerce?.activeStock ?? 0;
+  const minVariantPrice = commerce?.minVariantPrice ?? product?.price ?? 0;
+  const displayPrice = commerce?.displayPrice ?? 0;
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -220,7 +235,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
       id: product.id,
       name: product.name,
       price: activePrice,
-      image: product.images[0],
+      image: resolveProductImageUrl(product.images[0]),
       quantity: quantity,
       variant: variantLabel,
       slug: product.slug,
@@ -244,7 +259,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
         name: product.name,
         price: activePrice,
         originalPrice: product.compare_at_price,
-        image: product.images[0],
+        image: resolveProductImageUrl(product.images[0]),
         rating: product.rating,
         inStock: activeStock > 0,
         slug: product.slug,
@@ -276,8 +291,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     );
   }
 
-  const discount = product.compare_at_price ? Math.round((1 - activePrice / product.compare_at_price) * 100) : 0;
-  const minVariantPrice = hasVariants ? Math.min(...product.variants.map((v: any) => v.price || product.price)) : product.price;
+  const discount = product.compare_at_price ? Math.round((1 - displayPrice / product.compare_at_price) * 100) : 0;
 
   const productSchema = generateProductSchema({
     name: product.name,
@@ -288,7 +302,7 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
     sku: product.sku,
     rating: product.rating,
     reviewCount: product.reviewCount,
-    availability: product.quantity > 0 ? 'in_stock' : 'out_of_stock',
+    availability: (commerce?.effectiveStock ?? 0) > 0 ? 'in_stock' : 'out_of_stock',
     category: product.category,
     siteName
   });
@@ -325,14 +339,13 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
             <div className="grid lg:grid-cols-2 gap-12">
               <div>
                 <div className="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 mb-4 shadow-lg border border-gray-100">
-                  <Image
+                  <LazyImage
                     src={product.images[selectedImage]}
                     alt={product.name}
-                    fill
-                    className="object-cover object-center"
+                    className="absolute inset-0 w-full h-full"
+                    imgClassName="object-cover object-center"
                     sizes="(max-width: 1024px) 100vw, 50vw"
                     priority
-                    quality={80}
                   />
                   {discount > 0 && (
                     <span className="absolute top-6 right-6 bg-red-600 text-white text-sm font-semibold px-4 py-2 rounded-full">
@@ -350,13 +363,12 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                         className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${selectedImage === index ? 'border-blue-700 shadow-md' : 'border-gray-200 hover:border-gray-300'
                           }`}
                       >
-                        <Image
+                        <LazyImage
                           src={image}
                           alt={`${product.name} view ${index + 1}`}
-                          fill
-                          className="object-cover object-center"
+                          className="absolute inset-0 w-full h-full"
+                          imgClassName="object-cover object-center"
                           sizes="(max-width: 1024px) 25vw, 12vw"
-                          quality={60}
                         />
                       </button>
                     ))}
@@ -398,12 +410,12 @@ export default function ProductDetailClient({ slug }: { slug: string }) {
                 <div className="flex items-baseline space-x-4 mb-6">
                   {hasVariants && !selectedVariant ? (
                     <span className="text-3xl lg:text-4xl font-bold text-gray-900">
-                      From GH₵{minVariantPrice.toFixed(2)}
+                      From GH₵{(minVariantPrice ?? displayPrice).toFixed(2)}
                     </span>
                   ) : (
-                    <span className="text-3xl lg:text-4xl font-bold text-gray-900">GH₵{activePrice.toFixed(2)}</span>
+                    <span className="text-3xl lg:text-4xl font-bold text-gray-900">GH₵{displayPrice.toFixed(2)}</span>
                   )}
-                  {product.compare_at_price && product.compare_at_price > activePrice && (
+                  {product.compare_at_price && product.compare_at_price > displayPrice && (
                     <span className="text-xl text-gray-400 line-through">GH₵{product.compare_at_price.toFixed(2)}</span>
                   )}
                 </div>
