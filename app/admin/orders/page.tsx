@@ -44,6 +44,7 @@ export default function AdminOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [orderViewTab, setOrderViewTab] = useState<'all' | 'confirmed' | 'abandoned'>('all');
   const [sendingPaymentLink, setSendingPaymentLink] = useState<string | null>(null);
+  const [reconcilingOrder, setReconcilingOrder] = useState<string | null>(null);
   const [orderStats, setOrderStats] = useState<OrderStats[]>([
     { label: 'All Orders', count: 0, status: 'all' },
     { label: 'Pending', count: 0, status: 'pending' },
@@ -317,6 +318,42 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const handleReconcilePayment = async (order: Order) => {
+    setReconcilingOrder(order.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        alert('Your session expired. Please sign in again.');
+        return;
+      }
+
+      const response = await fetch('/api/admin/payment/moolre/reconcile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderNumber: order.order_number }),
+      });
+      const data = await response.json();
+      const result = data.result;
+      if (!result) throw new Error(data.error || data.message || 'Reconcile failed');
+
+      if (result.verdict === 'marked_paid' || result.verdict === 'already_paid') {
+        alert(`${order.order_number}: ${result.message}`);
+        fetchOrders();
+      } else {
+        alert(`${order.order_number}: ${result.message}`);
+      }
+    } catch (error: any) {
+      console.error('Error reconciling payment:', error);
+      alert(error.message || 'Failed to reconcile payment');
+    } finally {
+      setReconcilingOrder(null);
+    }
+  };
+
   const filteredOrders = orders.filter(order => {
     const customerName = getCustomerName(order).toLowerCase();
     const customerEmail = getCustomerEmail(order).toLowerCase();
@@ -348,6 +385,13 @@ export default function AdminOrdersPage() {
           <p className="text-gray-600 mt-1">Manage and track all customer orders</p>
         </div>
         <div className="flex items-center gap-3 w-full md:w-auto">
+          <Link
+            href="/admin/payments/reconcile"
+            className="flex-1 md:flex-none bg-white border border-blue-200 hover:bg-blue-50 text-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-sm flex items-center justify-center"
+          >
+            <i className="ri-exchange-funds-line mr-2"></i>
+            Reconcile
+          </Link>
           <button
             onClick={() => setShowProductStats(true)}
             className="flex-1 md:flex-none bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-lg font-semibold transition-colors whitespace-nowrap cursor-pointer shadow-sm flex items-center justify-center"
@@ -632,18 +676,32 @@ export default function AdminOrdersPage() {
                           <i className="ri-eye-line text-lg w-4 h-4 flex items-center justify-center"></i>
                         </Link>
                         {orderViewTab === 'abandoned' && order.payment_status !== 'paid' && (
-                          <button
-                            onClick={() => handleResendPaymentLink(order)}
-                            disabled={sendingPaymentLink === order.id}
-                            className="w-8 h-8 flex items-center justify-center text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-                            title="Resend Payment Link"
-                          >
-                            {sendingPaymentLink === order.id ? (
-                              <i className="ri-loader-4-line text-lg w-4 h-4 flex items-center justify-center animate-spin"></i>
-                            ) : (
-                              <i className="ri-send-plane-line text-lg w-4 h-4 flex items-center justify-center"></i>
-                            )}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleReconcilePayment(order)}
+                              disabled={reconcilingOrder === order.id}
+                              className="w-8 h-8 flex items-center justify-center text-green-700 hover:text-green-900 hover:bg-green-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              title="Check Moolre payment"
+                            >
+                              {reconcilingOrder === order.id ? (
+                                <i className="ri-loader-4-line text-lg w-4 h-4 flex items-center justify-center animate-spin"></i>
+                              ) : (
+                                <i className="ri-secure-payment-line text-lg w-4 h-4 flex items-center justify-center"></i>
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleResendPaymentLink(order)}
+                              disabled={sendingPaymentLink === order.id}
+                              className="w-8 h-8 flex items-center justify-center text-amber-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                              title="Resend Payment Link"
+                            >
+                              {sendingPaymentLink === order.id ? (
+                                <i className="ri-loader-4-line text-lg w-4 h-4 flex items-center justify-center animate-spin"></i>
+                              ) : (
+                                <i className="ri-send-plane-line text-lg w-4 h-4 flex items-center justify-center"></i>
+                              )}
+                            </button>
+                          </>
                         )}
                         <button
                           onClick={() => handlePrintInvoice(order.id)}

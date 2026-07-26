@@ -29,6 +29,7 @@ export default function OrderDetailClient({ orderId }: OrderDetailClientProps) {
   const [trackingNumber, setTrackingNumber] = useState('');
   const [adminNotes, setAdminNotes] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
+  const [reconcilingPayment, setReconcilingPayment] = useState(false);
 
   const handlePrint = () => {
     window.print();
@@ -194,6 +195,40 @@ export default function OrderDetailClient({ orderId }: OrderDetailClientProps) {
   };
 
   const [resendingNotification, setResendingNotification] = useState(false);
+
+  const handleReconcilePayment = async () => {
+    if (!order?.order_number) return;
+    try {
+      setReconcilingPayment(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        alert('Your session expired. Please sign in again.');
+        return;
+      }
+
+      const response = await fetch('/api/admin/payment/moolre/reconcile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ orderNumber: order.order_number }),
+      });
+      const data = await response.json();
+      const result = data.result;
+      if (!result) throw new Error(data.error || data.message || 'Reconcile failed');
+
+      alert(result.message);
+      if (result.verdict === 'marked_paid' || result.verdict === 'already_paid') {
+        await fetchOrderDetails();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to check Moolre payment');
+    } finally {
+      setReconcilingPayment(false);
+    }
+  };
 
   const handleResendNotification = async () => {
     if (!order) return;
@@ -572,6 +607,26 @@ export default function OrderDetailClient({ orderId }: OrderDetailClientProps) {
                     {order.metadata?.moolre_reference || order.payment_transaction_id || 'N/A'}
                   </span>
                 </div>
+                {order.payment_status !== 'paid' &&
+                  (order.payment_method === 'moolre' || order.metadata?.payment_method === 'moolre') && (
+                  <button
+                    onClick={handleReconcilePayment}
+                    disabled={reconcilingPayment}
+                    className="w-full mt-2 bg-green-700 hover:bg-green-800 text-white py-2.5 rounded-lg font-semibold transition-colors disabled:opacity-50 flex items-center justify-center"
+                  >
+                    {reconcilingPayment ? (
+                      <>
+                        <i className="ri-loader-4-line animate-spin mr-2"></i>
+                        Checking Moolre...
+                      </>
+                    ) : (
+                      <>
+                        <i className="ri-secure-payment-line mr-2"></i>
+                        Check Moolre Payment
+                      </>
+                    )}
+                  </button>
+                )}
               </div>
             </div>
 
