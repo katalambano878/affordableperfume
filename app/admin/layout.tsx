@@ -216,11 +216,6 @@ export default function AdminLayout({
       path: '/admin/analytics'
     },
     {
-      title: 'Coupons',
-      icon: 'ri-coupon-2-line',
-      path: '/admin/coupons'
-    },
-    {
       title: 'Customer Insights',
       icon: 'ri-user-search-line',
       path: '/admin/customer-insights',

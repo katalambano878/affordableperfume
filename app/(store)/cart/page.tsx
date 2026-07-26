@@ -4,7 +4,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
 import CartCountdown from '@/components/CartCountdown';
-import AdvancedCouponSystem from '@/components/AdvancedCouponSystem';
 import { useCart } from '@/context/CartContext';
 import PageHero from '@/components/PageHero';
 import { usePageTitle } from '@/hooks/usePageTitle';
@@ -12,7 +11,6 @@ import { usePageTitle } from '@/hooks/usePageTitle';
 export default function CartPage() {
   usePageTitle('Shopping Cart');
   const { cart: cartItems, removeFromCart, updateQuantity, subtotal, addToCart } = useCart();
-  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [savedItems, setSavedItems] = useState<any[]>([]);
 
   // Function to move item to saved for later (local state only for now)
@@ -33,29 +31,8 @@ export default function CartPage() {
     }
   };
 
-  const applyCoupon = (coupon: any) => {
-    setAppliedCoupon(coupon);
-  };
-
-  const removeCoupon = () => {
-    setAppliedCoupon(null);
-  };
-
-  // Savings calculation is tricky without originalPrice in Context.
-  // Assuming 0 for now unless we update Context.
-  const savings = 0;
-
-  let couponDiscount = 0;
-  if (appliedCoupon) {
-    if (appliedCoupon.type === 'percentage') {
-      couponDiscount = subtotal * (appliedCoupon.discount / 100);
-    } else {
-      couponDiscount = appliedCoupon.discount;
-    }
-  }
-
-  const shipping = subtotal >= 200 ? 0 : 15;
-  const total = subtotal - couponDiscount + shipping;
+  const shipping = 0;
+  const total = subtotal + shipping;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -86,9 +63,6 @@ export default function CartPage() {
                   <div className="bg-white rounded-xl shadow-sm p-6 overflow-hidden">
                     <div className="flex items-center justify-between mb-6">
                       <h2 className="text-2xl font-bold text-gray-900">Cart Items ({cartItems.length})</h2>
-                      {savings > 0 && (
-                        <span className="text-blue-700 font-semibold">You save GH₵{savings.toFixed(2)}</span>
-                      )}
                     </div>
 
                     <div className="space-y-6">
@@ -206,25 +180,10 @@ export default function CartPage() {
                         <span className="font-semibold">GH₵{subtotal.toFixed(2)}</span>
                       </div>
 
-                      {appliedCoupon && (
-                        <div className="flex justify-between text-blue-700">
-                          <div className="flex items-center space-x-2">
-                            <span>Coupon ({appliedCoupon.code})</span>
-                          </div>
-                          <span className="font-semibold">-GH₵{couponDiscount.toFixed(2)}</span>
-                        </div>
-                      )}
-
                       <div className="flex justify-between text-gray-700">
                         <span>Shipping</span>
-                        <span className="font-semibold">{shipping === 0 ? 'FREE' : `GH₵${shipping.toFixed(2)}`}</span>
+                        <span className="font-semibold">Calculated at checkout</span>
                       </div>
-
-                      {shipping > 0 && (
-                        <p className="text-sm text-amber-600">
-                          {/* Shipping threshold text removed */}
-                        </p>
-                      )}
                     </div>
 
                     <div className="border-t border-gray-200 pt-4 mb-6">
@@ -234,16 +193,9 @@ export default function CartPage() {
                       </div>
                     </div>
 
-                    <AdvancedCouponSystem
-                      subtotal={subtotal}
-                      onApply={applyCoupon}
-                      onRemove={removeCoupon}
-                      appliedCoupon={appliedCoupon}
-                    />
-
                     <Link
                       href="/checkout"
-                      className="block w-full bg-blue-700 hover:bg-blue-800 text-white py-4 rounded-lg font-semibold text-center transition-colors mt-6 mb-3 whitespace-nowrap"
+                      className="block w-full bg-blue-700 hover:bg-blue-800 text-white py-4 rounded-lg font-semibold text-center transition-colors mb-3 whitespace-nowrap"
                     >
                       Proceed to Checkout
                     </Link>
