@@ -71,7 +71,7 @@ export async function POST(req: Request) {
         // 3. ONLY verify with Moolre's API — no more trusting client-side flags
         let moolreApiVerified = false;
 
-        if (!process.env.MOOLRE_API_USER || !process.env.MOOLRE_API_PUBKEY) {
+        if (!process.env.MOOLRE_API_USER || !process.env.MOOLRE_API_PUBKEY || !process.env.MOOLRE_ACCOUNT_NUMBER) {
             console.error('[Verify] Missing Moolre API credentials');
             return NextResponse.json({
                 success: false,
@@ -86,25 +86,47 @@ export async function POST(req: Request) {
             orderNumber,
         ].filter((ref): ref is string => typeof ref === 'string' && ref.length > 0);
 
+        let verifiedMoolreRef = 'moolre-api-verify';
+
         try {
             for (const externalref of refsToTry) {
-                const checkResponse = await fetch('https://api.moolre.com/embed/status', {
+                // Correct Payment Status API (docs): /open/transact/status — not /embed/status
+                const checkResponse = await fetch('https://api.moolre.com/open/transact/status', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
+                        Accept: 'application/json',
                         'X-API-USER': process.env.MOOLRE_API_USER,
                         'X-API-PUBKEY': process.env.MOOLRE_API_PUBKEY
                     },
-                    body: JSON.stringify({ externalref })
+                    body: JSON.stringify({
+                        type: 1,
+                        idtype: '1',
+                        id: externalref,
+                        accountnumber: process.env.MOOLRE_ACCOUNT_NUMBER,
+                    })
                 });
 
                 const checkResult = await checkResponse.json();
                 console.log('[Verify] Moolre API response for', externalref, ':', JSON.stringify(checkResult));
 
-                const statusStr = String(checkResult.data?.status || '').toLowerCase();
-                const verified =
-                    (checkResult.status === 1 && checkResult.data) &&
-                    (statusStr === 'success' || statusStr === 'successful' || statusStr === 'completed' || statusStr === 'paid');
+                const txStatus =
+                    checkResult.data?.txstatus ??
+                    checkResult.data?.txtstatus ??
+                    checkResult.data?.status;
+                const statusStr = String(txStatus ?? '').toLowerCase();
+                const messageStr = String(checkResult.message || '').toLowerCase();
+                const apiOk = checkResult.status === 1 || checkResult.status === '1';
+                const txOk =
+                    txStatus === 1 ||
+                    txStatus === '1' ||
+                    statusStr === 'success' ||
+                    statusStr === 'successful' ||
+                    statusStr === 'completed' ||
+                    statusStr === 'paid';
+                const messageOk =
+                    messageStr.includes('successful') || messageStr.includes('success');
+                const verified = Boolean(checkResult.data) && apiOk && (txOk || messageOk);
 
                 if (!verified) continue;
 
@@ -117,6 +139,12 @@ export async function POST(req: Request) {
                     }
                 }
 
+                verifiedMoolreRef = String(
+                    checkResult.data?.transactionid ||
+                        checkResult.data?.thirdpartyref ||
+                        externalref ||
+                        'moolre-api-verify'
+                );
                 moolreApiVerified = true;
                 break;
             }
@@ -142,7 +170,7 @@ export async function POST(req: Request) {
         const { data: orderJson, error: updateError } = await supabaseAdmin
             .rpc('mark_order_paid', {
                 order_ref: orderNumber,
-                moolre_ref: 'moolre-api-verify'
+                moolre_ref: verifiedMoolreRef
             });
 
         if (updateError) {

@@ -10,7 +10,7 @@ import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/rate-lim
  *   "code": "P01",
  *   "message": "Transaction Successful",
  *   "data": {
- *     "txtstatus": 1,
+ *     "txstatus": 1,   // live payloads use txstatus (docs sometimes say txtstatus)
  *     "payer": "233535998837",
  *     "terminalid": "",
  *     "accountnumber": "10789906062911",
@@ -90,18 +90,20 @@ export async function POST(req: Request) {
         }
 
         // Order reference: check body.data.externalref first, then top-level fallbacks
+        const meta = data.metadata || body.metadata || {};
         const rawExternalRef =
             data.externalref ||
             data.external_reference ||
             data.orderRef ||
             body.externalref ||
             body.orderRef ||
-            body.external_reference;
+            body.external_reference ||
+            meta.original_order_number;
 
         // Strip retry suffix (e.g., "ORD-123-R1770000000" -> "ORD-123")
         const merchantOrderRef = rawExternalRef
-            ? rawExternalRef.replace(/-R\d+$/, '')
-            : (data.metadata?.original_order_number || body.metadata?.original_order_number);
+            ? String(rawExternalRef).replace(/-R\d+$/, '')
+            : undefined;
 
         // Moolre's transaction reference
         const moolreReference =
@@ -110,11 +112,11 @@ export async function POST(req: Request) {
             body.reference ||
             'callback';
 
-        // Payment status: body.status === 1 means API call succeeded,
-        // body.data.txtstatus === 1 means transaction was successful
+        // Payment status: body.status === 1 means API call succeeded.
+        // Moolre has used both `txtstatus` (docs) and `txstatus` (live payloads).
         const apiStatus = body.status;
-        const txStatus = data.txtstatus;
-        const messageStr = String(body.message || '').toLowerCase();
+        const txStatus = data.txtstatus ?? data.txstatus ?? body.txtstatus ?? body.txstatus;
+        const messageStr = String(body.message || data.message || '').toLowerCase();
 
         console.log('[Callback] Order ref:', merchantOrderRef,
             '| API status:', apiStatus,
@@ -129,17 +131,22 @@ export async function POST(req: Request) {
 
         // ============================================================
         // SECURITY: Strict success validation
-        // Require BOTH api status AND transaction status to be success,
-        // OR the message explicitly indicates success (as fallback only 
-        // when both status fields are present and consistent).
         // ============================================================
         const apiOk = (apiStatus === 1 || apiStatus === '1');
-        const txOk = (txStatus === 1 || txStatus === '1');
+        const txOk =
+            txStatus === 1 ||
+            txStatus === '1' ||
+            String(txStatus || '').toLowerCase() === 'success' ||
+            String(txStatus || '').toLowerCase() === 'successful';
         const messageOk = messageStr.includes('successful') || messageStr.includes('success');
 
-        // Require at least api status OR tx status to be explicitly successful
-        // AND the message must not indicate failure
-        const isSuccess = (apiOk || txOk) && !messageStr.includes('fail') && !messageStr.includes('error');
+        // Require API status, TX status, or an explicit success message —
+        // and never treat clear failure messages as success.
+        const isSuccess =
+            (apiOk || txOk || messageOk) &&
+            !messageStr.includes('fail') &&
+            !messageStr.includes('error') &&
+            !messageStr.includes('declined');
 
         if (isSuccess) {
             console.log(`[Callback] Payment SUCCESS for Order ${merchantOrderRef}`);
