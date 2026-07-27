@@ -307,7 +307,19 @@ export async function reconcileMoolreOrder(
   };
 }
 
-export async function listPendingMoolreOrders(limit = 50) {
+export type PendingMoolreOrder = {
+  id: string;
+  order_number: string;
+  email: string | null;
+  total: number | string | null;
+  payment_status: string | null;
+  status: string | null;
+  payment_method: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export async function listPendingMoolreOrders(limit = 50): Promise<PendingMoolreOrder[]> {
   const capped = Math.min(Math.max(limit, 1), 100);
   const { data, error } = await supabaseAdmin
     .from('orders')
@@ -319,8 +331,8 @@ export async function listPendingMoolreOrders(limit = 50) {
 
   if (error) throw new Error(error.message);
 
-  const pending = (data || []).filter((order) => {
-    const method = order.payment_method || order.metadata?.payment_method;
+  const pending = ((data || []) as PendingMoolreOrder[]).filter((order) => {
+    const method = order.payment_method || (order.metadata?.payment_method as string | undefined);
     return method === 'moolre';
   });
 

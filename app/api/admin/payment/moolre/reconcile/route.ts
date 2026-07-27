@@ -3,6 +3,7 @@ import { verifyAuth } from '@/lib/auth';
 import {
   listPendingMoolreOrders,
   reconcileMoolreOrder,
+  type PendingMoolreOrder,
   type ReconcileResult,
 } from '@/lib/payment/moolre';
 
