@@ -273,6 +273,7 @@ function OrderTrackingContent() {
   const statusBadge = getStatusBadge();
   const trackingNumber = order.metadata?.tracking_number || '';
   const shippingAddress = order.shipping_address || {};
+  const orderItems = Array.isArray(order.order_items) ? order.order_items : [];
   const estimatedDelivery = new Date(new Date(order.created_at).getTime() + 7 * 24 * 60 * 60 * 1000)
     .toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -341,11 +342,56 @@ function OrderTrackingContent() {
                 <div>
                   <p className="text-sm text-gray-600">Items</p>
                   <p className="font-semibold text-gray-900">
-                    {order.order_items?.length || 0} Product{(order.order_items?.length || 0) !== 1 ? 's' : ''}
+                    {orderItems.length} Product{orderItems.length !== 1 ? 's' : ''}
                   </p>
+                  {orderItems.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                      {orderItems.map((item: any) => item.product_name).filter(Boolean).join(', ')}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Order Items — above timeline so mobile users see products without scrolling past status steps */}
+          <div className="mb-8">
+            <h2 className="text-lg font-bold text-gray-900 mb-4">Order Items</h2>
+            {orderItems.length === 0 ? (
+              <p className="text-sm text-gray-500 bg-gray-50 rounded-lg p-4">
+                Line items are not available for this order. Contact support with your order number if you need details.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {orderItems.map((item: any) => (
+                  <div key={item.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
+                      {item.products?.product_images?.[0]?.url || item.metadata?.image ? (
+                        <img
+                          src={item.products?.product_images?.[0]?.url || item.metadata?.image}
+                          alt={item.product_name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <i className="ri-image-line text-2xl text-gray-300"></i>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900">{item.product_name}</h3>
+                      <p className="text-sm text-gray-600 mt-1">Qty: {item.quantity}</p>
+                      {item.variant_name && (
+                        <p className="text-xs text-gray-500">{item.variant_name}</p>
+                      )}
+                    </div>
+                    <p className="font-bold text-blue-700 whitespace-nowrap">
+                      GH₵ {Number(item.unit_price).toFixed(2)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Tracking Timeline */}
@@ -385,38 +431,6 @@ function OrderTrackingContent() {
                     {step.date}
                   </p>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Order Items */}
-        <div className="bg-white rounded-xl shadow-sm p-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">Order Items</h2>
-          <div className="space-y-4">
-            {order.order_items?.map((item: any) => (
-              <div key={item.id} className="flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-                <div className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200">
-                  {item.products?.product_images?.[0]?.url || item.metadata?.image ? (
-                    <img
-                      src={item.products?.product_images?.[0]?.url || item.metadata?.image}
-                      alt={item.product_name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <i className="ri-image-line text-2xl text-gray-300"></i>
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{item.product_name}</h3>
-                  <p className="text-sm text-gray-600 mt-1">Quantity: {item.quantity}</p>
-                  {item.variant_name && (
-                    <p className="text-xs text-gray-500">{item.variant_name}</p>
-                  )}
-                </div>
-                <p className="font-bold text-blue-700">GH₵ {Number(item.unit_price).toFixed(2)}</p>
               </div>
             ))}
           </div>

@@ -58,10 +58,47 @@ export default function AdminOrdersPage() {
   const [showProductStats, setShowProductStats] = useState(false);
   const [productFilter, setProductFilter] = useState('all');
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
+  const [searchResults, setSearchResults] = useState<Order[] | null>(null);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  useEffect(() => {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      setSearchResults(null);
+      setSearchLoading(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearchLoading(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        if (!token) {
+          setSearchResults(null);
+          return;
+        }
+
+        const res = await fetch(`/api/admin/orders/search?q=${encodeURIComponent(query)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || 'Search failed');
+        setSearchResults(payload.orders || []);
+      } catch (err) {
+        console.error('Order search failed:', err);
+        setSearchResults([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   const fetchOrders = async () => {
     try {
@@ -354,10 +391,12 @@ export default function AdminOrdersPage() {
     }
   };
 
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = (searchResults ?? orders).filter(order => {
     const customerName = getCustomerName(order).toLowerCase();
     const customerEmail = getCustomerEmail(order).toLowerCase();
     const orderId = (order.order_number || order.id).toLowerCase();
+    const tracking = String(order.metadata?.tracking_number || '').toLowerCase();
+    const query = searchQuery.toLowerCase();
 
     // Filter by view tab (all / paid / awaiting payment)
     const isConfirmed = order.payment_status === 'paid';
@@ -368,9 +407,13 @@ export default function AdminOrdersPage() {
           ? isConfirmed
           : !isConfirmed;
 
-    const matchesSearch = orderId.includes(searchQuery.toLowerCase()) ||
-      customerName.includes(searchQuery.toLowerCase()) ||
-      customerEmail.includes(searchQuery.toLowerCase());
+    const matchesSearch =
+      searchResults !== null ||
+      !query ||
+      orderId.includes(query) ||
+      customerName.includes(query) ||
+      customerEmail.includes(query) ||
+      tracking.includes(query);
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     const matchesProduct = productFilter === 'all' || 
       order.order_items?.some((item: any) => item.product_name === productFilter);
@@ -489,10 +532,19 @@ export default function AdminOrdersPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by order ID, customer name, or email..."
+                  placeholder="Search order #, tracking (SLI-…), email, phone, name…"
                   className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                 />
               </div>
+              {searchQuery.trim().length >= 2 && (
+                <p className="text-xs text-gray-500 mt-2">
+                  {searchLoading
+                    ? 'Searching all orders…'
+                    : searchResults !== null
+                      ? `Found ${searchResults.length} matching order${searchResults.length === 1 ? '' : 's'} across the full store`
+                      : null}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center space-x-3">
