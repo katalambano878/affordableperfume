@@ -48,6 +48,15 @@ Run `scripts/sql/performance_indexes_orders.sql` on prod with `CREATE INDEX CONC
 
 N/A — not in codebase.
 
+## Deploy verification
+
+| Item | Value |
+|------|-------|
+| Commit | `214634b` |
+| Coolify image | `slrbujar86myr4hgjh4lzwb9:214634bb597d50f76fc4d97d7ab998dfa1f87bd9` |
+| Local `npm run build` | Pass (2026-07-29) |
+| Post-deploy smoke | `/`, `/shop`, `/og.png`, callback GET, admin routes |
+
 ## Production readiness
 
 **Ready after listed manual actions.**

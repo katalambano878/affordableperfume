@@ -8,7 +8,7 @@
 
 | Check | Status |
 |-------|--------|
-| Git | `main` @ `c64e4f8` (+ local playbook/reconcile edits) |
+| Git | `main` @ `214634b` (hardening pass deployed) |
 | Architecture | Plain PG via `DATABASE_URL`; browser talks to app `/rest/v1`, `/auth/v1`, `/storage/v1` |
 | Hubtel / Paystack | **Not implemented** (proposal only) |
 | Known Jul 2026 incidents | Missed Moolre callbacks; wrong status URL; admin 500-order cap; track page items below fold |
