@@ -23,6 +23,7 @@ export type ReconcileVerdict =
   | 'marked_paid'
   | 'not_paid'
   | 'amount_mismatch'
+  | 'missing_amount'
   | 'not_moolre'
   | 'missing_credentials'
   | 'order_not_found'
@@ -106,6 +107,7 @@ export async function fetchMoolrePaymentStatus(externalref: string): Promise<Moo
       id: externalref,
       accountnumber: creds.account,
     }),
+    signal: AbortSignal.timeout(15000),
   });
 
   return response.json();
@@ -191,22 +193,37 @@ export async function reconcileMoolreOrder(
   let usedRef: string | undefined;
   let moolreRef: string | undefined;
   let amountMismatch = false;
+  let missingAmount = false;
 
   for (const externalref of refs) {
     try {
       const payload = await fetchMoolrePaymentStatus(externalref);
       lastPayload = payload;
-      console.log('[MoolreReconcile]', orderNumber, 'ref=', externalref, JSON.stringify(payload));
+      console.log(
+        '[MoolreReconcile]',
+        JSON.stringify({
+          orderNumber,
+          ref: externalref,
+          code: payload.code,
+          message: payload.message,
+          txstatus: payload.data?.txstatus ?? payload.data?.txtstatus,
+          amount: payload.data?.amount,
+          transactionid: payload.data?.transactionid,
+        })
+      );
 
       if (!isMoolrePaymentSuccessful(payload)) continue;
 
-      if (payload.data?.amount != null) {
-        const paidAmount = parseFloat(String(payload.data.amount));
-        const expectedAmount = Number(order.total);
-        if (Math.abs(paidAmount - expectedAmount) > 0.01) {
-          amountMismatch = true;
-          continue;
-        }
+      if (payload.data?.amount == null || payload.data.amount === '') {
+        missingAmount = true;
+        continue;
+      }
+
+      const paidAmount = parseFloat(String(payload.data.amount));
+      const expectedAmount = Number(order.total);
+      if (Number.isNaN(paidAmount) || Math.abs(paidAmount - expectedAmount) > 0.01) {
+        amountMismatch = true;
+        continue;
       }
 
       usedRef = externalref;
@@ -226,6 +243,23 @@ export async function reconcileMoolreOrder(
       total: order.total,
       verdict: 'amount_mismatch',
       message: 'Moolre payment amount does not match order total',
+      payment_status: order.payment_status,
+      status: order.status,
+      moolre: {
+        code: lastPayload?.code,
+        message: lastPayload?.message,
+        txstatus: lastPayload?.data?.txstatus ?? lastPayload?.data?.txtstatus,
+      },
+    };
+  }
+
+  if (missingAmount && !moolreRef) {
+    return {
+      orderNumber,
+      email: order.email,
+      total: order.total,
+      verdict: 'missing_amount',
+      message: 'Moolre confirmed success but did not return amount — refusing auto mark-paid',
       payment_status: order.payment_status,
       status: order.status,
       moolre: {

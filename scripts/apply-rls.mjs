@@ -1,9 +1,15 @@
 /**
+ * DEPRECATED — DO NOT RUN against production plain Postgres.
+ * See scripts/DEPRECATED_SUPABASE_RLS.md
+ *
  * Apply Row Level Security (RLS) policies to all Supabase tables.
  * Run with: node scripts/apply-rls.mjs
- * 
+ *
  * Uses the Supabase Management API via the service role key.
  */
+
+console.error('DEPRECATED: apply-rls.mjs must not be run on plain-Postgres production. See scripts/DEPRECATED_SUPABASE_RLS.md');
+process.exit(1);
 
 import { createClient } from '@supabase/supabase-js';
 

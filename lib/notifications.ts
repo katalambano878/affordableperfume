@@ -183,7 +183,8 @@ export async function sendSMS({ to, message, senderId }: { to: string; message: 
                         message: message
                     }
                 ]
-            })
+            }),
+            signal: AbortSignal.timeout(15000),
         });
 
         const contentType = response.headers.get('content-type') || '';
@@ -208,6 +209,28 @@ export async function sendSMS({ to, message, senderId }: { to: string; message: 
 export async function sendOrderConfirmation(order: any) {
     const brand = await getBrand();
     const { id, email, phone: orderPhone, shipping_address, total, created_at, order_number, metadata } = order;
+
+    // Prevent duplicate SMS/email when callback + verify both fire.
+    // Claim the send up-front so a racing second caller exits early.
+    if (metadata?.confirmation_sent_at) {
+        console.log(`[Notification] Skipping duplicate confirmation for #${order_number} (sent ${metadata.confirmation_sent_at})`);
+        return { skipped: true, reason: 'already_sent' };
+    }
+    try {
+        const existingMeta =
+            metadata && typeof metadata === 'object' ? { ...metadata } : {};
+        await serverDb
+            .from('orders')
+            .update({
+                metadata: {
+                    ...existingMeta,
+                    confirmation_sent_at: new Date().toISOString(),
+                },
+            })
+            .eq('id', id);
+    } catch (err: any) {
+        console.warn('[Notification] Could not stamp confirmation_sent_at:', err?.message);
+    }
 
     const baseUrl = brand.url;
     const emailFrom = `${brand.emailName} <noreply@${baseUrl.replace(/https?:\/\//, '').split('/')[0]}>`;

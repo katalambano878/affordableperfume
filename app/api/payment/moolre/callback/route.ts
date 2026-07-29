@@ -170,18 +170,24 @@ export async function POST(req: Request) {
             }
 
             // ============================================================
-            // SECURITY: Verify amount matches — REJECT if mismatch
+            // SECURITY: Amount required and must match order total
             // ============================================================
-            const callbackAmount = data.amount ? parseFloat(data.amount) : (body.amount ? parseFloat(body.amount) : null);
-            if (callbackAmount !== null) {
-                const expectedAmount = Number(existingOrder.total);
-                if (Math.abs(callbackAmount - expectedAmount) > 0.01) {
-                    console.error('[Callback] AMOUNT MISMATCH — REJECTING! Expected:', expectedAmount, 'Got:', callbackAmount, 'Order:', merchantOrderRef);
-                    return NextResponse.json({
-                        success: false,
-                        message: 'Payment amount does not match order total'
-                    }, { status: 400 });
-                }
+            const rawAmount = data.amount ?? body.amount;
+            if (rawAmount == null || rawAmount === '') {
+                console.error('[Callback] MISSING AMOUNT — REJECTING! Order:', merchantOrderRef);
+                return NextResponse.json({
+                    success: false,
+                    message: 'Payment amount missing from callback'
+                }, { status: 400 });
+            }
+            const callbackAmount = parseFloat(String(rawAmount));
+            const expectedAmount = Number(existingOrder.total);
+            if (Number.isNaN(callbackAmount) || Math.abs(callbackAmount - expectedAmount) > 0.01) {
+                console.error('[Callback] AMOUNT MISMATCH — REJECTING! Expected:', expectedAmount, 'Got:', callbackAmount, 'Order:', merchantOrderRef);
+                return NextResponse.json({
+                    success: false,
+                    message: 'Payment amount does not match order total'
+                }, { status: 400 });
             }
 
             // Mark order as paid via RPC
@@ -201,7 +207,17 @@ export async function POST(req: Request) {
                 return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
             }
 
-            console.log('[Callback] Order updated! ID:', orderJson.id, '| Status:', orderJson.status);
+            console.log(
+                '[Callback] Order updated!',
+                JSON.stringify({
+                    order: merchantOrderRef,
+                    id: orderJson.id,
+                    status: orderJson.status,
+                    moolreRef: String(moolreReference),
+                    amount: callbackAmount,
+                    verdict: 'marked_paid',
+                })
+            );
 
             // Update customer stats
             try {

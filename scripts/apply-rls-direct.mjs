@@ -1,9 +1,15 @@
 /**
+ * DEPRECATED — DO NOT RUN against production plain Postgres.
+ * See scripts/DEPRECATED_SUPABASE_RLS.md
+ *
  * Apply Row Level Security (RLS) policies directly to Supabase PostgreSQL.
  * Connects via Supabase's pooler using the service role JWT.
- * 
+ *
  * Run: node scripts/apply-rls-direct.mjs
  */
+
+console.error('DEPRECATED: apply-rls-direct.mjs must not be run on plain-Postgres production. See scripts/DEPRECATED_SUPABASE_RLS.md');
+process.exit(1);
 
 import pg from 'pg';
 import fs from 'fs';

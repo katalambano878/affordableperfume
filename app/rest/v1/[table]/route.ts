@@ -10,6 +10,28 @@ export const runtime = "nodejs";
 
 const PG_IDENT = /^[a-z_][a-z0-9_]*$/i;
 
+/** Tables that must never be mutated via the public REST shim */
+const WRITE_DENY_TABLES = new Set([
+  "auth_users",
+  "schema_migrations",
+  "spatial_ref_sys",
+]);
+
+/** On INSERT: never allow clients to create already-paid / privileged rows */
+const ORDERS_INSERT_PROTECTED = new Set(["payment_status"]);
+
+/** On PATCH: money/payment fields only via server APIs / mark_order_paid */
+const ORDERS_UPDATE_PROTECTED = new Set([
+  "payment_status",
+  "payment_method",
+  "total",
+  "subtotal",
+  "discount_total",
+  "tax_total",
+]);
+
+const PROFILES_PROTECTED_FIELDS = new Set(["role"]);
+
 function corsHeaders(): HeadersInit {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -17,6 +39,40 @@ function corsHeaders(): HeadersInit {
       "authorization, apikey, content-type, prefer, x-client-info, accept-profile, content-profile",
     "Access-Control-Allow-Methods": "GET,POST,PATCH,PUT,DELETE,OPTIONS",
   };
+}
+
+function assertWritableTable(table: string): NextResponse | null {
+  if (WRITE_DENY_TABLES.has(table)) {
+    return jsonError(`Writes to table '${table}' are not allowed`, 403);
+  }
+  return null;
+}
+
+function stripProtectedFields(
+  table: string,
+  body: unknown,
+  mode: "insert" | "update"
+): unknown {
+  if (body == null || typeof body !== "object") return body;
+
+  const stripOne = (row: Record<string, unknown>) => {
+    const next = { ...row };
+    if (table === "orders") {
+      const keys = mode === "insert" ? ORDERS_INSERT_PROTECTED : ORDERS_UPDATE_PROTECTED;
+      for (const key of keys) delete next[key];
+    }
+    if (table === "profiles") {
+      for (const key of PROFILES_PROTECTED_FIELDS) delete next[key];
+    }
+    return next;
+  };
+
+  if (Array.isArray(body)) {
+    return body.map((row) =>
+      row && typeof row === "object" ? stripOne(row as Record<string, unknown>) : row
+    );
+  }
+  return stripOne(body as Record<string, unknown>);
 }
 
 function preferSingle(req: NextRequest): boolean {
@@ -106,9 +162,12 @@ export async function POST(
   }
   const { table } = await ctx.params;
   if (!PG_IDENT.test(table)) return jsonError("Invalid table");
+  const denied = assertWritableTable(table);
+  if (denied) return denied;
 
-  const body = await req.json().catch(() => null);
-  if (body == null) return jsonError("Invalid JSON body");
+  const rawBody = await req.json().catch(() => null);
+  if (rawBody == null) return jsonError("Invalid JSON body");
+  const body = stripProtectedFields(table, rawBody, "insert") as Record<string, unknown> | Record<string, unknown>[];
 
   const client = createClient();
   // supabase-js upsert => Prefer: resolution=merge-duplicates (+ ?on_conflict=col)
@@ -116,8 +175,8 @@ export async function POST(
   const isUpsert = prefer.includes("resolution=merge-duplicates");
   const onConflict = req.nextUrl.searchParams.get("on_conflict") || undefined;
   let qb = isUpsert
-    ? client.from(table).upsert(body, onConflict ? { onConflict } : undefined)
-    : client.from(table).insert(body);
+    ? client.from(table).upsert(body as any, onConflict ? { onConflict } : undefined)
+    : client.from(table).insert(body as any);
   if (preferReturn(req) || preferSingle(req)) {
     qb = qb.select("*") as typeof qb;
   }
@@ -141,12 +200,15 @@ export async function PATCH(
   }
   const { table } = await ctx.params;
   if (!PG_IDENT.test(table)) return jsonError("Invalid table");
+  const denied = assertWritableTable(table);
+  if (denied) return denied;
 
-  const body = await req.json().catch(() => null);
-  if (body == null || typeof body !== "object") return jsonError("Invalid JSON body");
+  const rawBody = await req.json().catch(() => null);
+  if (rawBody == null || typeof rawBody !== "object") return jsonError("Invalid JSON body");
+  const body = stripProtectedFields(table, rawBody, "update") as Record<string, unknown>;
 
   const client = createClient();
-  let qb = client.from(table).update(body);
+  let qb = client.from(table).update(body as any);
   applyPostgrestParams(qb as any, req.nextUrl.searchParams);
   if (preferReturn(req) || preferSingle(req)) {
     qb = qb.select("*") as typeof qb;
@@ -168,6 +230,11 @@ export async function DELETE(
   }
   const { table } = await ctx.params;
   if (!PG_IDENT.test(table)) return jsonError("Invalid table");
+  const denied = assertWritableTable(table);
+  if (denied) return denied;
+  if (table === "orders" || table === "order_items") {
+    return jsonError(`DELETE on '${table}' via REST is not allowed`, 403);
+  }
 
   const client = createClient();
   let qb = client.from(table).delete();

@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       count: orders.length,
-      orders: orders.map((o) => ({
+      orders: orders.map((o: PendingMoolreOrder) => ({
         id: o.id,
         order_number: o.order_number,
         email: o.email,
@@ -34,7 +34,10 @@ export async function GET(request: Request) {
         payment_status: o.payment_status,
         status: o.status,
         created_at: o.created_at,
-        moolre_payment_ref: o.metadata?.moolre_payment_ref || null,
+        moolre_payment_ref:
+          typeof o.metadata?.moolre_payment_ref === 'string'
+            ? o.metadata.moolre_payment_ref
+            : null,
       })),
     });
   } catch (error: any) {

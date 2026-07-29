@@ -60,9 +60,13 @@ export default function AdminOrdersPage() {
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<Order[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [ordersOffset, setOrdersOffset] = useState(0);
+  const [hasMoreOrders, setHasMoreOrders] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const ORDERS_PAGE_SIZE = 100;
 
   useEffect(() => {
-    fetchOrders();
+    fetchOrders(true);
   }, []);
 
   useEffect(() => {
@@ -100,11 +104,34 @@ export default function AdminOrdersPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
+  const recomputeOrderAggregates = (allOrders: Order[]) => {
+    const productNames = new Set<string>();
+    allOrders.forEach((o) => {
+      o.order_items?.forEach((item: any) => {
+        if (item.product_name) productNames.add(item.product_name);
+      });
+    });
+    setAvailableProducts(Array.from(productNames).sort());
+    setConfirmedCount(allOrders.filter((o) => o.payment_status === 'paid').length);
+    setAbandonedCount(allOrders.filter((o) => o.payment_status !== 'paid').length);
+    setOrderStats([
+      { label: 'All Orders', count: allOrders.length, status: 'all' },
+      { label: 'Pending', count: allOrders.filter((o) => o.status === 'pending').length, status: 'pending' },
+      { label: 'Processing', count: allOrders.filter((o) => o.status === 'processing').length, status: 'processing' },
+      { label: 'Packaged', count: allOrders.filter((o) => o.status === 'shipped').length, status: 'shipped' },
+      { label: 'Delivered', count: allOrders.filter((o) => o.status === 'delivered').length, status: 'delivered' },
+      { label: 'Cancelled', count: allOrders.filter((o) => o.status === 'cancelled').length, status: 'cancelled' },
+    ]);
+  };
 
-      // Fetch orders with related data
+  const fetchOrders = async (reset = false) => {
+    try {
+      if (reset) setLoading(true);
+      else setLoadingMore(true);
+
+      const from = reset ? 0 : orders.length;
+      const to = from + ORDERS_PAGE_SIZE - 1;
+
       const { data: ordersData, error } = await supabase
         .from('orders')
         .select(`
@@ -126,43 +153,29 @@ export default function AdminOrdersPage() {
           )
         `)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .range(from, to);
 
       if (error) throw error;
 
-      setOrders(ordersData || []);
+      const page = ordersData || [];
+      setHasMoreOrders(page.length === ORDERS_PAGE_SIZE);
+      setOrdersOffset(from + page.length);
 
-      // Extract unique product names for filter
-      const productNames = new Set<string>();
-      ordersData?.forEach(o => {
-        o.order_items?.forEach((item: any) => {
-          if (item.product_name) productNames.add(item.product_name);
-        });
+      setOrders((prev) => {
+        const merged = reset ? page : [...prev, ...page];
+        const byId = new Map<string, Order>();
+        merged.forEach((o) => byId.set(o.id, o));
+        const allOrders = Array.from(byId.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        recomputeOrderAggregates(allOrders);
+        return allOrders;
       });
-      setAvailableProducts(Array.from(productNames).sort());
-
-      // Separate confirmed (paid) from abandoned (pending payment)
-      const confirmedOrders = ordersData?.filter(o => o.payment_status === 'paid') || [];
-      const abandonedOrders = ordersData?.filter(o => o.payment_status !== 'paid') || [];
-      
-      setConfirmedCount(confirmedOrders.length);
-      setAbandonedCount(abandonedOrders.length);
-
-      const allOrders = ordersData || [];
-      const stats = [
-        { label: 'All Orders', count: allOrders.length, status: 'all' },
-        { label: 'Pending', count: allOrders.filter(o => o.status === 'pending').length, status: 'pending' },
-        { label: 'Processing', count: allOrders.filter(o => o.status === 'processing').length, status: 'processing' },
-        { label: 'Packaged', count: allOrders.filter(o => o.status === 'shipped').length, status: 'shipped' },
-        { label: 'Delivered', count: allOrders.filter(o => o.status === 'delivered').length, status: 'delivered' },
-        { label: 'Cancelled', count: allOrders.filter(o => o.status === 'cancelled').length, status: 'cancelled' }
-      ];
-      setOrderStats(stats);
-
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
 
@@ -279,7 +292,7 @@ export default function AdminOrdersPage() {
           }).catch(err => console.error('Notification error', err));
         });
 
-        await fetchOrders();
+        await fetchOrders(true);
         setSelectedOrders([]);
         alert(`${selectedOrders.length} orders updated to ${newStatus}`);
       } catch (error) {
@@ -379,7 +392,7 @@ export default function AdminOrdersPage() {
 
       if (result.verdict === 'marked_paid' || result.verdict === 'already_paid') {
         alert(`${order.order_number}: ${result.message}`);
-        fetchOrders();
+        fetchOrders(true);
       } else {
         alert(`${order.order_number}: ${result.message}`);
       }
@@ -773,7 +786,22 @@ export default function AdminOrdersPage() {
 
         {filteredOrders.length > 0 && (
           <div className="p-6 border-t border-gray-200 flex items-center justify-between">
-            <p className="text-gray-600">Showing {filteredOrders.length} of {orders.length} orders</p>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+              <p className="text-gray-600">
+                Showing {filteredOrders.length} of {orders.length} loaded orders
+                {hasMoreOrders && searchResults === null ? ' (more available)' : ''}
+              </p>
+              {hasMoreOrders && searchResults === null && (
+                <button
+                  type="button"
+                  onClick={() => fetchOrders(false)}
+                  disabled={loadingMore}
+                  className="px-4 py-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium disabled:opacity-50"
+                >
+                  {loadingMore ? 'Loading…' : 'Load more orders'}
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

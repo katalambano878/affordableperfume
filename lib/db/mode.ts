@@ -1,17 +1,20 @@
 /**
  * Plain-Postgres mode is active when DATABASE_URL is set.
- * Production keeps using hosted Supabase until cutover.
  */
 export function isPlainPostgres(): boolean {
   return !!(process.env.DATABASE_URL || process.env.POSTGRES_URL);
 }
 
 /**
- * Edge middleware cannot use the pg pool — use the public cutover flag.
- * On VPS/cutover, set NEXT_PUBLIC_USE_PLAIN_PG=true together with DATABASE_URL.
+ * Prefer local JWT verification when cut over to plain Postgres.
+ * - Explicit: NEXT_PUBLIC_USE_PLAIN_PG=true
+ * - Fail-closed: DATABASE_URL / POSTGRES_URL present (Coolify injects into the app process)
+ * Hosted Supabase service-role middleware only when neither applies.
  */
 export function usePlainPostgresAuth(): boolean {
-  return process.env.NEXT_PUBLIC_USE_PLAIN_PG === 'true';
+  if (process.env.NEXT_PUBLIC_USE_PLAIN_PG === 'true') return true;
+  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) return true;
+  return false;
 }
 
 export function authJwtSecret(): string {

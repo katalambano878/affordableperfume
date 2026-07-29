@@ -53,7 +53,7 @@ export async function generateMetadata(): Promise<Metadata> {
     ? toAbsolutePublicUrl(ogImageSetting, baseUrl)
     : siteLogo
       ? toAbsolutePublicUrl(siteLogo, baseUrl)
-      : `${baseUrl}/og-default`;
+      : `${baseUrl}/og.png`;
 
   const fullTitle = [siteName, siteTagline].filter(Boolean).join(' | ');
   const defaultTitle = (fullTitle && fullTitle.length > 15)

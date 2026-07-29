@@ -101,7 +101,7 @@ Also usually required: `AUTH_JWT_SECRET` (or `JWT_SECRET`), `NEXT_PUBLIC_APP_URL
 |---------|-------------|
 | `npm ci` `ECONNRESET` | Retry deploy (network); not a code bug |
 | TypeScript: local `const sendEmail = Boolean(...)` shadows import | Rename local flag (`wantEmail`) |
-| Invalid `eslint-disable` | Remove / fix directive so `next build` passes |
+| TypeScript: implicit `any` in admin API `.map()` | Type rows from helper (`PendingMoolreOrder`) or annotate callback param — **build fails on Coolify** |
 | Build OK but runtime 503 on `/auth/v1` or `/rest/v1` | Missing `DATABASE_URL` in Coolify env |
 | Deploy queued but old SHA still live | Wait / check Coolify queue; confirm with `docker ps` image tag |
 
@@ -176,9 +176,32 @@ These are product decisions — apply only when the merchant wants them.
 | Returns | Match ops | Redirect `/returns` → `/contact`; remove “30-day returns” trust lines from cart/PDP if no returns portal |
 | Duplicate CTAs | Less confusion | Drop footer “Concierge” if it is the same as Contact |
 | Social login stubs | Don’t tease dead features | Remove disabled Google/Facebook buttons until OAuth is wired |
+| **Cart / checkout coupon codes** | Merchant doesn’t run promo codes | Remove promo UI; no client-side “apply code” without server validation |
 | PageHero / about cards | Consistency | Reuse shared hero image map (`lib/hero-images.ts`) |
 
 **Rule:** one job per section; don’t leave fake UI that looks clickable (`alert('coming soon')`, disabled social buttons, stub admin actions).
+
+### Coupons & discount codes (storefront off)
+
+When the merchant **does not** want customers entering promo codes (common for perfume / fixed-price catalogs):
+
+| Do | Don’t |
+|----|--------|
+| Remove cart coupon block (`AdvancedCouponSystem` or inline “Enter code”) | Leave a code field that never hits the server or always fails |
+| Remove **Coupons** from admin sidebar if staff shouldn’t manage codes | Delete `coupons` table / admin page unless asked — `/admin/coupons` can stay for direct URL |
+| Set checkout `discount_total: 0` (or server-validated only) | Trust client `localStorage` coupon state on place-order |
+| Keep **compare-at / “Save X%”** on PDP (list price vs sale price) | Confuse that with checkout coupon codes |
+
+**Affordable Perfumes GH (Jul 2026, `dd77c1a`):**
+
+- Deleted `components/AdvancedCouponSystem.tsx`
+- Stripped coupon UI from `app/(store)/cart/page.tsx`
+- Removed **Coupons** menu item from `app/admin/layout.tsx`
+- Checkout continues with `discount_total: 0` in order payload
+
+**Still separate:** newsletter welcome codes via `NEWSLETTER_PROMO_CODE` + `/api/newsletter/subscribe` (§9) — only promise a code if a matching coupon exists in admin **or** remove that copy from the welcome email.
+
+**If coupons return later:** wire validate → apply on **server** at checkout (amount from DB), increment `usage_count`, and re-add storefront UI only when that path is tested end-to-end.
 
 ---
 
@@ -277,21 +300,69 @@ Many templates use `setTimeout` “success” with no backend.
 
 ---
 
-## 10. Payments & notifications
+## 10. Payments & notifications (Moolre)
 
 ### Merchant identity
 
 Set Coolify env (not only container file):
 
 - `MOOLRE_MERCHANT_EMAIL` → real store inbox  
-- Fallback in code should also use the store domain, not a template default like `admin@standardecom.com`
+- `MOOLRE_API_USER`, `MOOLRE_API_PUBKEY`, `MOOLRE_ACCOUNT_NUMBER`, `MOOLRE_CALLBACK_SECRET`  
+- Fallback in code should use the store domain, not a template default like `admin@standardecom.com`
+
+### Payment flow (Affordable pattern)
+
+| Step | Path | Notes |
+|------|------|--------|
+| Initiate link | `POST /api/payment/moolre` | Amount from **DB only**; unique `externalref`: `{order_number}-R{timestamp}` stored in `metadata.moolre_payment_ref` |
+| Webhook | `POST /api/payment/moolre/callback` | Validates `MOOLRE_CALLBACK_SECRET` (`body.secret` or `data.secret`); strips `-R\d+$` from `externalref` → order number |
+| Customer redirect verify | `POST /api/payment/moolre/verify` | Order-success page; same Moolre status logic as admin reconcile |
+| Admin reconcile | `GET/POST /api/admin/payment/moolre/reconcile` | `verifyAuth(..., { requireAdmin: true })`; single order or bulk `mode: "pending"` |
+
+Shared server logic lives in **`lib/payment/moolre.ts`** (`fetchMoolrePaymentStatus`, `isMoolrePaymentSuccessful`, `reconcileMoolreOrder`, `listPendingMoolreOrders`). Callback and verify routes should call this helper — don’t duplicate status parsing.
+
+### Moolre API gotchas (learned Jul 2026)
+
+1. **Callback payload uses `data.txstatus`**, not only docs’ `txtstatus`. Parse both:  
+   `data.txstatus ?? data.txtstatus ?? body.txstatus`.
+2. **Payment Status API** (check if paid):  
+   `POST https://api.moolre.com/open/transact/status`  
+   Body: `{ type: 1, idtype: "1", id: "<externalref>", accountnumber: "<MOOLRE_ACCOUNT_NUMBER>" }`  
+   Headers: `X-API-USER`, `X-API-PUBKEY`.  
+   **Do not** use `/embed/status` — it returned HTML and broke verify/reconcile.
+3. **Lookup refs:** try `metadata.moolre_payment_ref` first, then bare `order_number`. Moolre keys successful payments on the **`-R…` ref**, not the order number alone (`Transaction not found` / `SS07`).
+4. **Success:** `status === 1` and (`txstatus === 1` or message contains “successful”). Reject “not found”, “fail”, “declined”.
+5. **Amount check:** compare `data.amount` to `orders.total` (±0.01) before `mark_order_paid`.
 
 ### When payment confirms
 
 Ensure RPC (or equivalent) runs:
 
-- `mark_order_paid`
+- `mark_order_paid(order_ref, moolre_ref)`
 - `update_customer_stats` (or UI aggregates orders live — see §11)
+- Order confirmation SMS/email via `sendOrderConfirmation` (callback, verify, and reconcile paths)
+
+### Missed callbacks — why orders stay “pending”
+
+| Cause | Mitigation |
+|-------|------------|
+| Moolre webhook never hit your server | Customer **order-success** page calls `/api/payment/moolre/verify`; admin **Payment Reconcile** |
+| Deploy / container restart during checkout | Moolre may not retry; reconcile by payment ref |
+| Wrong status endpoint in code | Fix to `/open/transact/status` + `txstatus` |
+| Customer abandoned MoMo (no PIN) | Moolre returns `SS07` / not found — **not** paid; don’t mark manually without provider proof |
+| Amount mismatch | Reconcile rejects; investigate fraud or wrong order total |
+
+### Admin UI (reconcile)
+
+| Surface | Path |
+|---------|------|
+| Sidebar | **Payment Reconcile** → `/admin/payments/reconcile` |
+| Orders list | Awaiting Payment tab → green “check Moolre” icon |
+| Order detail | Payment Info → **Check Moolre Payment** when unpaid + method moolre |
+
+Bulk: **Reconcile recent pending (40)** — rate-limit aware; each row hits Moolre sequentially.
+
+**Ops:** After a bad deploy window or merchant report, run bulk reconcile once, then spot-check any order with a MoMo receipt against Moolre dashboard before manual `mark_order_paid`.
 
 ### Campaign / notify route
 
@@ -399,12 +470,13 @@ Run through these on every store after migration:
 | Products list | Category + stock filters work; select-all = filtered set |
 | Product create | Slug collision handling; images upload |
 | Categories | Cascade / unlink products on delete (FK-safe) |
-| Orders list | Shows new orders; payment link resend sends `Authorization` |
+| Orders list | Shows new orders; payment link resend sends `Authorization`; Moolre reconcile icon on awaiting payment |
+| Payment reconcile | `/admin/payments/reconcile` lists pending Moolre orders; single + bulk check |
 | Inventory | Export CSV; Import CSV (SKU + qty); Edit → product form; View → storefront |
 | Analytics | Export CSV wired (not a dead button) |
 | Reviews | Status values match DB enum |
 | POS | Loads products with limit; can create order + customer |
-| Coupons | Create/edit/list |
+| Coupons | Create/edit/list **or** hidden from nav when storefront promos disabled (§4) |
 | Customers | Order counts accurate (§11) |
 | Marketing campaigns | Email and/or SMS; subject not required for SMS-only |
 | Wishlist (storefront) | Same storage source as header badge |
@@ -422,6 +494,7 @@ Before launch, replace template leftovers:
 - Announcement bar text
 - Shipping policy (zones vs nationwide; no free-shipping promises if unpaid)
 - Returns: remove portal + cart/PDP “30-day returns” if not offered
+- **Coupons:** no promo-code field on cart/checkout if merchant doesn’t use codes; align newsletter copy with reality (§4)
 - Footer: drop duplicate Concierge / Contact; fix support email / socials
 - Auth: remove Google/Facebook until real OAuth exists
 - `site_settings` name, logo, phone
@@ -487,13 +560,16 @@ Manual:
 - [ ] Logged-in checkout autofills saved address
 - [ ] Order history: Track / Reorder / Invoice / Help all work (no alerts)
 - [ ] Cart has no returns promise if returns aren’t offered
+- [ ] Cart / checkout have **no** promo-code UI if coupons are disabled (§4)
 - [ ] Footer has no duplicate Concierge ↔ Contact
 - [ ] Login has no dead Google/Facebook buttons
 - [ ] Admin → Customers shows non-zero orders for known buyers
 - [ ] Admin → Blog → New Post saves draft/publish
 - [ ] Admin → Inventory + Analytics export work
 - [ ] Admin → Products SEO fields auto-fill
-- [ ] Checkout / Moolre callback still marks paid
+- [ ] Checkout / Moolre callback still marks paid (check logs: `TX status` not `undefined`)
+- [ ] Order-success verify recovers payment if callback missed (`/api/payment/moolre/verify`)
+- [ ] Admin → Payment Reconcile marks a known-paid test ref (or shows `not_paid` for abandoned cart)
 - [ ] After deploy, PWA hard-refresh once; no white-screen on `/shop`
 - [ ] No “coming soon” alerts on admin or account primary actions
 
@@ -506,13 +582,13 @@ Manual:
 3. Fix build blockers (TS shadows, eslint).  
 4. Images: compress public + storage; set `unoptimized` if optimizer is empty; fix banner URLs; add product URL helper.  
 5. Fix service worker (§16) before heavy PWA testing.  
-6. Wire newsletter + merchant emails.  
+6. Wire newsletter + merchant emails; **Moolre:** shared `lib/payment/moolre.ts`, callback `txstatus`, verify + admin reconcile on `/open/transact/status`.  
 7. Admin customers live order aggregation + optional SQL backfill.  
 8. Product SEO helper + backfill.  
 9. Replace blog stub with real editor (or hide module).  
 10. Shop scroll stability + PDP active/commerce helpers.  
 11. Checkout address autofill + order history actions.  
-12. Storefront UX / shipping / returns / footer / auth stub audit.  
+12. Storefront UX / shipping / returns / footer / auth stub / **coupon UI** audit.  
 13. Full verification checklist → deploy → re-check image hash + PWA refresh.
 
 ---
@@ -544,7 +620,7 @@ If a store was **never** on Supabase, skip §1 cutover and still apply §2–§1
 | Coolify app | `affordableperfume-app` |
 | UUID prefix | `slrbujar86myr4hgjh4lzwb9` |
 | Production | https://www.affordableperfumesgh.com |
-| Notable commits (Jul 2026) | Plain-PG harden → SEO/perf/admin → hero/customers → blog → shop counts → PWA caret → product images/SW → checkout autofill + order actions → shop scroll stability → returns/concierge cleanup |
+| Notable commits (Jul 2026) | Plain-PG harden → … → returns/concierge cleanup → **remove cart/admin-nav coupons** (`dd77c1a`) → **Moolre callback/verify fix + admin payment reconcile** (`a65b43a`, `bcad03e`) |
 
 Key reusable artifacts from this repo to port:
 
@@ -559,9 +635,19 @@ Key reusable artifacts from this repo to port:
 - Shop infinite-scroll stability in `app/(store)/shop/page.tsx`  
 - Checkout address prefill in `app/(store)/checkout/page.tsx`  
 - Order actions + `app/(store)/account/invoice/[id]/page.tsx`  
+- **Coupons off (storefront):** remove `AdvancedCouponSystem`; strip cart promo UI; drop admin nav entry — see §4 (`dd77c1a`)  
 - `public/service-worker.js` (no HTML cache; storage network-only)  
 - `app/error.tsx`  
-- `next.config.ts` `images.unoptimized` + storage `remotePatterns`
+- `next.config.ts` `images.unoptimized` + storage `remotePatterns`  
+- **Moolre:** `lib/payment/moolre.ts`; `app/api/payment/moolre/{route,callback,verify}`; `app/api/admin/payment/moolre/reconcile`; `app/admin/payments/reconcile/page.tsx`; reconcile actions on `app/admin/orders/page.tsx` + `OrderDetailClient.tsx`
+
+### Quick Moolre reconcile (ops, inside running app container)
+
+Use admin UI in production when possible. For one-off bulk recovery after an incident, a script can call the same status API + `mark_order_paid` (never invent payment proof):
+
+- Query: unpaid + `payment_method = 'moolre'` + not cancelled  
+- Status: `POST /open/transact/status` with `metadata.moolre_payment_ref`  
+- Only mark when `txstatus === 1` and amount matches  
 
 ---
 
