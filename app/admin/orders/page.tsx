@@ -55,6 +55,7 @@ export default function AdminOrdersPage() {
   ]);
   const [abandonedCount, setAbandonedCount] = useState(0);
   const [confirmedCount, setConfirmedCount] = useState(0);
+  const [totalOrderCount, setTotalOrderCount] = useState(0);
   const [showProductStats, setShowProductStats] = useState(false);
   const [productFilter, setProductFilter] = useState('all');
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
@@ -104,7 +105,7 @@ export default function AdminOrdersPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const recomputeOrderAggregates = (allOrders: Order[]) => {
+  const updateLoadedProductFilter = (allOrders: Order[]) => {
     const productNames = new Set<string>();
     allOrders.forEach((o) => {
       o.order_items?.forEach((item: any) => {
@@ -112,17 +113,36 @@ export default function AdminOrdersPage() {
       });
     });
     setAvailableProducts(Array.from(productNames).sort());
-    setConfirmedCount(allOrders.filter((o) => o.payment_status === 'paid').length);
-    setAbandonedCount(allOrders.filter((o) => o.payment_status !== 'paid').length);
-    setOrderStats([
-      { label: 'All Orders', count: allOrders.length, status: 'all' },
-      { label: 'Pending', count: allOrders.filter((o) => o.status === 'pending').length, status: 'pending' },
-      { label: 'Processing', count: allOrders.filter((o) => o.status === 'processing').length, status: 'processing' },
-      { label: 'Packaged', count: allOrders.filter((o) => o.status === 'shipped').length, status: 'shipped' },
-      { label: 'Delivered', count: allOrders.filter((o) => o.status === 'delivered').length, status: 'delivered' },
-      { label: 'Cancelled', count: allOrders.filter((o) => o.status === 'cancelled').length, status: 'cancelled' },
-    ]);
   };
+
+  const fetchOrderStats = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const res = await fetch('/api/admin/orders/stats', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || 'Stats failed');
+
+      setTotalOrderCount(payload.total || 0);
+      setConfirmedCount(payload.paid || 0);
+      setAbandonedCount(payload.awaiting || 0);
+      const by = payload.byStatus || {};
+      setOrderStats([
+        { label: 'All Orders', count: by.all ?? payload.total ?? 0, status: 'all' },
+        { label: 'Pending', count: by.pending ?? 0, status: 'pending' },
+        { label: 'Processing', count: by.processing ?? 0, status: 'processing' },
+        { label: 'Packaged', count: by.shipped ?? 0, status: 'shipped' },
+        { label: 'Delivered', count: by.delivered ?? 0, status: 'delivered' },
+        { label: 'Cancelled', count: by.cancelled ?? 0, status: 'cancelled' },
+      ]);
+    } catch (err) {
+      console.error('Order stats failed:', err);
+    }
+  }, []);
 
   const fetchOrders = useCallback(async (reset = false) => {
     if (!reset && (loadingMoreRef.current || !hasMoreRef.current)) return;
@@ -180,7 +200,7 @@ export default function AdminOrdersPage() {
         const allOrders = Array.from(byId.values()).sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
         );
-        recomputeOrderAggregates(allOrders);
+        updateLoadedProductFilter(allOrders);
         return allOrders;
       });
     } catch (error) {
@@ -194,8 +214,9 @@ export default function AdminOrdersPage() {
   }, []);
 
   useEffect(() => {
+    fetchOrderStats();
     fetchOrders(true);
-  }, [fetchOrders]);
+  }, [fetchOrders, fetchOrderStats]);
 
   // Infinite scroll: load next page when the sentinel enters the viewport
   useEffect(() => {
@@ -515,7 +536,7 @@ export default function AdminOrdersPage() {
           }`}
         >
           <i className="ri-list-check-2 mr-2"></i>
-          All Orders ({orders.length})
+          All Orders ({totalOrderCount || orders.length})
         </button>
         <button
           onClick={() => { setOrderViewTab('confirmed'); setStatusFilter('all'); }}
@@ -826,8 +847,10 @@ export default function AdminOrdersPage() {
         <div className="p-6 border-t border-gray-200">
           {filteredOrders.length > 0 && (
             <p className="text-gray-600 text-sm">
-              Showing {filteredOrders.length}
-              {searchResults === null ? ` of ${orders.length} loaded` : ''} orders
+              Showing {filteredOrders.length} in view
+              {searchResults === null
+                ? ` · ${orders.length} loaded${totalOrderCount ? ` of ${totalOrderCount} total` : ''}`
+                : ''}
               {hasMoreOrders && searchResults === null ? ' · scroll for more' : ''}
               {!hasMoreOrders && searchResults === null ? ' · all loaded' : ''}
             </p>
