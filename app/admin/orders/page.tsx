@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import ProductSalesStats from './ProductSalesStats';
 
@@ -60,14 +60,14 @@ export default function AdminOrdersPage() {
   const [availableProducts, setAvailableProducts] = useState<string[]>([]);
   const [searchResults, setSearchResults] = useState<Order[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [ordersOffset, setOrdersOffset] = useState(0);
   const [hasMoreOrders, setHasMoreOrders] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const ORDERS_PAGE_SIZE = 100;
-
-  useEffect(() => {
-    fetchOrders(true);
-  }, []);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
+  const nextOffsetRef = useRef(0);
+  const loadingMoreRef = useRef(false);
+  const hasMoreRef = useRef(true);
+  const initialLoadingRef = useRef(true);
 
   useEffect(() => {
     const query = searchQuery.trim();
@@ -124,12 +124,22 @@ export default function AdminOrdersPage() {
     ]);
   };
 
-  const fetchOrders = async (reset = false) => {
-    try {
-      if (reset) setLoading(true);
-      else setLoadingMore(true);
+  const fetchOrders = useCallback(async (reset = false) => {
+    if (!reset && (loadingMoreRef.current || !hasMoreRef.current)) return;
 
-      const from = reset ? 0 : orders.length;
+    try {
+      if (reset) {
+        setLoading(true);
+        initialLoadingRef.current = true;
+        nextOffsetRef.current = 0;
+        hasMoreRef.current = true;
+        setHasMoreOrders(true);
+      } else {
+        loadingMoreRef.current = true;
+        setLoadingMore(true);
+      }
+
+      const from = reset ? 0 : nextOffsetRef.current;
       const to = from + ORDERS_PAGE_SIZE - 1;
 
       const { data: ordersData, error } = await supabase
@@ -158,8 +168,10 @@ export default function AdminOrdersPage() {
       if (error) throw error;
 
       const page = ordersData || [];
-      setHasMoreOrders(page.length === ORDERS_PAGE_SIZE);
-      setOrdersOffset(from + page.length);
+      const more = page.length === ORDERS_PAGE_SIZE;
+      hasMoreRef.current = more;
+      setHasMoreOrders(more);
+      nextOffsetRef.current = from + page.length;
 
       setOrders((prev) => {
         const merged = reset ? page : [...prev, ...page];
@@ -174,10 +186,37 @@ export default function AdminOrdersPage() {
     } catch (error) {
       console.error('Error fetching orders:', error);
     } finally {
+      initialLoadingRef.current = false;
       setLoading(false);
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchOrders(true);
+  }, [fetchOrders]);
+
+  // Infinite scroll: load next page when the sentinel enters the viewport
+  useEffect(() => {
+    if (searchResults !== null) return;
+
+    const node = loadMoreSentinelRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const hit = entries[0]?.isIntersecting;
+        if (!hit || initialLoadingRef.current) return;
+        if (!hasMoreRef.current || loadingMoreRef.current) return;
+        fetchOrders(false);
+      },
+      { root: null, rootMargin: '320px 0px', threshold: 0 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [fetchOrders, searchResults, orders.length, hasMoreOrders]);
 
   const statusColors: Record<string, string> = {
     'pending': 'bg-amber-100 text-amber-700 border-amber-200',
@@ -784,26 +823,30 @@ export default function AdminOrdersPage() {
           </table>
         </div>
 
-        {filteredOrders.length > 0 && (
-          <div className="p-6 border-t border-gray-200 flex items-center justify-between">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
-              <p className="text-gray-600">
-                Showing {filteredOrders.length} of {orders.length} loaded orders
-                {hasMoreOrders && searchResults === null ? ' (more available)' : ''}
-              </p>
-              {hasMoreOrders && searchResults === null && (
-                <button
-                  type="button"
-                  onClick={() => fetchOrders(false)}
-                  disabled={loadingMore}
-                  className="px-4 py-2 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50 font-medium disabled:opacity-50"
-                >
-                  {loadingMore ? 'Loading…' : 'Load more orders'}
-                </button>
+        <div className="p-6 border-t border-gray-200">
+          {filteredOrders.length > 0 && (
+            <p className="text-gray-600 text-sm">
+              Showing {filteredOrders.length}
+              {searchResults === null ? ` of ${orders.length} loaded` : ''} orders
+              {hasMoreOrders && searchResults === null ? ' · scroll for more' : ''}
+              {!hasMoreOrders && searchResults === null ? ' · all loaded' : ''}
+            </p>
+          )}
+          {searchResults === null && (
+            <div
+              ref={loadMoreSentinelRef}
+              className="h-10 flex items-center justify-center mt-2"
+              aria-hidden
+            >
+              {loadingMore && (
+                <span className="inline-flex items-center gap-2 text-sm text-blue-700">
+                  <i className="ri-loader-4-line animate-spin" />
+                  Loading more orders…
+                </span>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <ProductSalesStats isOpen={showProductStats} onClose={() => setShowProductStats(false)} />

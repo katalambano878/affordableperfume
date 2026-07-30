@@ -47,4 +47,11 @@ See `scripts/sql/performance_indexes_orders.sql`. Prefer `CREATE INDEX CONCURREN
 ## Index apply notes
 
 SQL: `scripts/sql/performance_indexes_orders.sql`  
-Apply one `CREATE INDEX CONCURRENTLY` at a time on prod (not inside a transaction). Optional until EXPLAIN shows seq scans on hot paths.
+
+**Applied on prod (2026-07-29)** via `CREATE INDEX CONCURRENTLY`:
+
+- `idx_orders_order_number` (already present; confirmed)
+- `idx_orders_tracking_number`
+- `idx_order_items_order_id`
+- `idx_orders_email_lower`
+- `idx_orders_payment_status_created`
