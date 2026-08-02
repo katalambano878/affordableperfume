@@ -34,15 +34,22 @@ export function getPool(): Pool {
       "DATABASE_URL is not set, so the Postgres backend cannot start."
     );
   }
+  const statementTimeoutMs = Number(process.env.PG_STATEMENT_TIMEOUT_MS || 30_000);
   _pool = new Pool({
     connectionString,
     max: Number(process.env.PG_POOL_MAX || 10),
     idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: Number(process.env.PG_CONNECTION_TIMEOUT_MS || 10_000),
     // Self-hosted Postgres on the same host / private network: TLS optional.
     ssl:
       process.env.PGSSL === "require"
         ? { rejectUnauthorized: false }
         : undefined,
+  });
+  _pool.on("connect", (client) => {
+    client.query(`SET statement_timeout TO ${statementTimeoutMs}`).catch(() => {
+      /* ignore — pool still usable */
+    });
   });
   return _pool;
 }

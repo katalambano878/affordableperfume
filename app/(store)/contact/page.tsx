@@ -98,8 +98,10 @@ function ContactForm() {
         });
 
       if (error) {
-        // Table might not exist, still show success
-        console.log('Note: contact_submissions table may not exist');
+        console.error('Contact submission failed:', error.message);
+        setSubmitStatus('error');
+        setIsSubmitting(false);
+        return;
       }
 
       // Send Contact Notification

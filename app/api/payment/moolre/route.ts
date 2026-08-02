@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/rate-limit';
+import { recordPaymentAttempt } from '@/lib/payment/records';
 
 export async function POST(req: Request) {
     try {
@@ -77,8 +78,22 @@ export async function POST(req: Request) {
                     payment_method: 'moolre',
                     moolre_payment_ref: uniqueRef,
                 },
+                payment_method: 'moolre',
+                payment_provider: 'moolre',
             })
             .eq('id', order.id);
+
+        await recordPaymentAttempt({
+            orderId: order.id,
+            orderNumber: orderRef,
+            internalRef: uniqueRef,
+            expectedAmount: amount,
+            currency: 'GHS',
+            status: 'initiated',
+            metadata: {
+                customer_email: customerEmail || order.email,
+            },
+        });
 
         // Moolre Payload
         const payload = {

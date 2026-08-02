@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendOrderConfirmation } from '@/lib/notifications';
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/rate-limit';
+import {
+    finalizeCallbackEvent,
+    markPaymentAttemptSuccessful,
+    recordCallbackEvent,
+} from '@/lib/payment/records';
 
 /**
  * Moolre Callback Payload Structure (from their actual API):
@@ -129,6 +134,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, message: 'Missing order reference' }, { status: 400 });
         }
 
+        const signatureValid = expectedSecret
+            ? !!(callbackSecret && callbackSecret === expectedSecret)
+            : null;
+
+        const callbackRecord = await recordCallbackEvent({
+            gateway: 'moolre',
+            externalEventId: moolreReference ? String(moolreReference) : null,
+            eventType: 'moolre_callback',
+            internalPaymentRef: rawExternalRef ? String(rawExternalRef) : null,
+            gatewayRef: moolreReference ? String(moolreReference) : null,
+            orderNumber: merchantOrderRef,
+            payload: body,
+            signatureValid,
+            processingStatus: 'received',
+            metadata: { ts: body.ts || null },
+        });
+
+        if (callbackRecord.isDuplicate) {
+            console.log('[Callback] Duplicate event ignored for', merchantOrderRef);
+            return NextResponse.json({ success: true, message: 'Duplicate callback ignored' });
+        }
+
         // ============================================================
         // SECURITY: Strict success validation
         // ============================================================
@@ -154,18 +181,26 @@ export async function POST(req: Request) {
             // Check if order exists
             const { data: existingOrder, error: fetchError } = await supabaseAdmin
                 .from('orders')
-                .select('id, order_number, payment_status, total')
+                .select('id, order_number, payment_status, total, metadata')
                 .eq('order_number', merchantOrderRef)
                 .single();
 
             if (fetchError || !existingOrder) {
                 console.error('[Callback] Order not found:', merchantOrderRef);
+                await finalizeCallbackEvent({ id: callbackRecord.id }, 'rejected', 'Order not found');
                 return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
             }
 
             // Already paid - idempotent
             if (existingOrder.payment_status === 'paid') {
                 console.log('[Callback] Order already paid, skipping:', merchantOrderRef);
+                await markPaymentAttemptSuccessful({
+                    internalRef: rawExternalRef ? String(rawExternalRef) : null,
+                    orderNumber: merchantOrderRef,
+                    gatewayRef: String(moolreReference),
+                    amountPaid: Number(existingOrder.total),
+                });
+                await finalizeCallbackEvent({ id: callbackRecord.id }, 'ignored_duplicate', 'Order already paid');
                 return NextResponse.json({ success: true, message: 'Order already processed' });
             }
 
@@ -175,6 +210,7 @@ export async function POST(req: Request) {
             const rawAmount = data.amount ?? body.amount;
             if (rawAmount == null || rawAmount === '') {
                 console.error('[Callback] MISSING AMOUNT — REJECTING! Order:', merchantOrderRef);
+                await finalizeCallbackEvent({ id: callbackRecord.id }, 'rejected', 'Missing amount');
                 return NextResponse.json({
                     success: false,
                     message: 'Payment amount missing from callback'
@@ -184,6 +220,11 @@ export async function POST(req: Request) {
             const expectedAmount = Number(existingOrder.total);
             if (Number.isNaN(callbackAmount) || Math.abs(callbackAmount - expectedAmount) > 0.01) {
                 console.error('[Callback] AMOUNT MISMATCH — REJECTING! Expected:', expectedAmount, 'Got:', callbackAmount, 'Order:', merchantOrderRef);
+                await finalizeCallbackEvent(
+                    { id: callbackRecord.id },
+                    'rejected',
+                    `Amount mismatch expected=${expectedAmount} got=${callbackAmount}`
+                );
                 return NextResponse.json({
                     success: false,
                     message: 'Payment amount does not match order total'
@@ -199,13 +240,23 @@ export async function POST(req: Request) {
 
             if (updateError) {
                 console.error('[Callback] RPC Error:', updateError.message);
+                await finalizeCallbackEvent({ id: callbackRecord.id }, 'error', updateError.message);
                 return NextResponse.json({ success: false, message: 'Database update failed' }, { status: 500 });
             }
 
             if (!orderJson) {
                 console.error('[Callback] Order not found after RPC:', merchantOrderRef);
+                await finalizeCallbackEvent({ id: callbackRecord.id }, 'error', 'Order missing after RPC');
                 return NextResponse.json({ success: false, message: 'Order not found' }, { status: 404 });
             }
+
+            await markPaymentAttemptSuccessful({
+                internalRef: rawExternalRef ? String(rawExternalRef) : null,
+                orderNumber: merchantOrderRef,
+                gatewayRef: String(moolreReference),
+                amountPaid: callbackAmount,
+            });
+            await finalizeCallbackEvent({ id: callbackRecord.id }, 'processed');
 
             console.log(
                 '[Callback] Order updated!',
@@ -243,20 +294,48 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: true, message: 'Payment verified and Order Updated' });
 
         } else {
-            // Payment failed
+            // Payment failed — never overwrite an already-paid order
             console.log(`[Callback] Payment FAILED for ${merchantOrderRef} | Status: ${apiStatus} | TX: ${txStatus}`);
 
-            await supabaseAdmin
+            const { data: existingOrder } = await supabaseAdmin
                 .from('orders')
-                .update({
-                    payment_status: 'failed',
-                    metadata: {
-                        moolre_reference: moolreReference,
-                        failure_reason: body.message || 'Payment failed'
-                    }
-                })
-                .eq('order_number', merchantOrderRef);
+                .select('id, payment_status, metadata')
+                .eq('order_number', merchantOrderRef)
+                .maybeSingle();
 
+            if (existingOrder?.payment_status === 'paid') {
+                await finalizeCallbackEvent(
+                    { id: callbackRecord.id },
+                    'ignored_duplicate',
+                    'Delayed failure after success ignored'
+                );
+                return NextResponse.json({ success: true, message: 'Order already paid; failure ignored' });
+            }
+
+            if (existingOrder) {
+                const prevMeta =
+                    existingOrder.metadata && typeof existingOrder.metadata === 'object'
+                        ? existingOrder.metadata
+                        : {};
+                await supabaseAdmin
+                    .from('orders')
+                    .update({
+                        payment_status: 'failed',
+                        metadata: {
+                            ...prevMeta,
+                            moolre_reference: moolreReference,
+                            failure_reason: body.message || 'Payment failed',
+                        },
+                    })
+                    .eq('order_number', merchantOrderRef)
+                    .neq('payment_status', 'paid');
+            }
+
+            await finalizeCallbackEvent(
+                { id: callbackRecord.id },
+                'processed',
+                body.message || 'Payment not successful'
+            );
             return NextResponse.json({ success: false, message: 'Payment not successful' });
         }
 

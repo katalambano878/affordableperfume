@@ -36,6 +36,7 @@
     "dev": "cross-env NODE_ENV=development next dev -H 0.0.0.0 -p 3001",
     "dev:staging": "dotenv -e .env.staging -- cross-env NODE_ENV=development next dev -H 0.0.0.0 -p 3001",
     "lint": "next lint",
+    "test:payment": "tsx --test lib/payment/moolre.test.ts",
     "compress:images": "node scripts/compress-public-images.mjs",
     "compress:storage": "node scripts/compress-storage.mjs",
     "seo:backfill": "node scripts/backfill-product-seo.cjs"

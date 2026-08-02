@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendOrderConfirmation } from '@/lib/notifications';
+import { markPaymentAttemptSuccessful } from '@/lib/payment/records';
 
 export type MoolreStatusResult = {
   status?: number | string;
@@ -303,6 +304,13 @@ export async function reconcileMoolreOrder(
       moolreRef,
     };
   }
+
+  await markPaymentAttemptSuccessful({
+    internalRef: usedRef,
+    orderNumber,
+    gatewayRef: moolreRef,
+    amountPaid: Number(order.total),
+  });
 
   if (orderJson?.email) {
     try {

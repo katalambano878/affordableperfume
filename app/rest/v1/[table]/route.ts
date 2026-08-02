@@ -10,11 +10,86 @@ export const runtime = "nodejs";
 
 const PG_IDENT = /^[a-z_][a-z0-9_]*$/i;
 
+/**
+ * Positive allowlist for client REST reads (post-RLS trust model).
+ * Server routes using supabaseAdmin/pg bypass this shim.
+ */
+const READ_ALLOW_TABLES = new Set([
+  "addresses",
+  "audit_logs",
+  "banners",
+  "blog_posts",
+  "cart_items",
+  "categories",
+  "cms_content",
+  "contact_submissions",
+  "coupons",
+  "customers",
+  "navigation_items",
+  "navigation_menus",
+  "notifications",
+  "order_items",
+  "order_status_history",
+  "orders",
+  "pages",
+  "product_images",
+  "product_variants",
+  "products",
+  "profiles",
+  "return_items",
+  "return_requests",
+  "review_images",
+  "reviews",
+  "site_settings",
+  "store_modules",
+  "store_settings",
+  "support_messages",
+  "support_tickets",
+  "wholesale_applications",
+  "wishlist_items",
+]);
+
+/** Tables clients may INSERT/UPDATE/DELETE via REST (still field-stripped where needed). */
+const WRITE_ALLOW_TABLES = new Set([
+  "addresses",
+  "banners",
+  "blog_posts",
+  "cart_items",
+  "categories",
+  "cms_content",
+  "contact_submissions",
+  "coupons",
+  "customers",
+  "navigation_items",
+  "navigation_menus",
+  "notifications",
+  "order_items",
+  "orders",
+  "pages",
+  "product_images",
+  "product_variants",
+  "products",
+  "profiles",
+  "return_items",
+  "return_requests",
+  "review_images",
+  "reviews",
+  "site_settings",
+  "store_modules",
+  "store_settings",
+  "support_messages",
+  "support_tickets",
+  "wholesale_applications",
+  "wishlist_items",
+]);
+
 /** Tables that must never be mutated via the public REST shim */
 const WRITE_DENY_TABLES = new Set([
   "auth_users",
   "schema_migrations",
   "spatial_ref_sys",
+  "payment_attempts",
+  "payment_callback_events",
 ]);
 
 /** On INSERT: never allow clients to create already-paid / privileged rows */
@@ -41,8 +116,15 @@ function corsHeaders(): HeadersInit {
   };
 }
 
+function assertReadableTable(table: string): NextResponse | null {
+  if (!READ_ALLOW_TABLES.has(table)) {
+    return jsonError(`Reads from table '${table}' are not allowed`, 403);
+  }
+  return null;
+}
+
 function assertWritableTable(table: string): NextResponse | null {
-  if (WRITE_DENY_TABLES.has(table)) {
+  if (WRITE_DENY_TABLES.has(table) || !WRITE_ALLOW_TABLES.has(table)) {
     return jsonError(`Writes to table '${table}' are not allowed`, 403);
   }
   return null;
@@ -110,6 +192,8 @@ export async function GET(
   }
   const { table } = await ctx.params;
   if (!PG_IDENT.test(table)) return jsonError("Invalid table");
+  const deniedRead = assertReadableTable(table);
+  if (deniedRead) return deniedRead;
 
   const client = createClient();
   const qb = client.from(table);

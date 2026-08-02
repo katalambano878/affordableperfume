@@ -19,6 +19,9 @@ export const JSONB_COLUMNS: Record<string, Set<string>> = {
   notifications: new Set(["data"]),
   banners: new Set(["metadata"]),
   order_items: new Set(["metadata"]),
+  payment_attempts: new Set(["metadata"]),
+  payment_callback_events: new Set(["metadata"]),
+  contact_submissions: new Set(["metadata"]),
 };
 
 export const FK_MAP: Record<string, FkEdge[]> = {
@@ -53,6 +56,9 @@ export const FK_MAP: Record<string, FkEdge[]> = {
     { column: "order_id", foreignTable: "orders", foreignColumn: "id" },
     { column: "product_id", foreignTable: "products", foreignColumn: "id" },
     { column: "variant_id", foreignTable: "product_variants", foreignColumn: "id" },
+  ],
+  payment_attempts: [
+    { column: "order_id", foreignTable: "orders", foreignColumn: "id" },
   ],
   order_status_history: [
     { column: "order_id", foreignTable: "orders", foreignColumn: "id" },
