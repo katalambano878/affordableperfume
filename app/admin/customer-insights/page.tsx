@@ -35,17 +35,20 @@ export default function CustomerInsightsPage() {
     try {
       setLoading(true);
 
-      // 1. Fetch Profiles
+      // Caps prevent browser freezes as the store grows (full scan is not viable client-side)
       const { data: profiles, error: profileError } = await supabase
         .from('profiles')
-        .select('*');
+        .select('id, email, full_name, created_at, role')
+        .order('created_at', { ascending: false })
+        .limit(500);
 
       if (profileError) throw profileError;
 
-      // 2. Fetch Orders for calculations
       const { data: orders, error: orderError } = await supabase
         .from('orders')
-        .select('user_id, total, created_at, status');
+        .select('user_id, total, created_at, status')
+        .order('created_at', { ascending: false })
+        .limit(3000);
 
       if (orderError) throw orderError;
 

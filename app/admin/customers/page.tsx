@@ -24,7 +24,8 @@ export default function AdminCustomersPage() {
       const { data: customerData, error: cError } = await supabase
         .from('customers')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
       if (cError) {
         // Fallback to old profiles-based approach if customers table doesn't exist yet
@@ -175,8 +176,9 @@ export default function AdminCustomersPage() {
     try {
       const { data: profiles, error: pError } = await supabase
         .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('id, email, full_name, created_at, phone, role')
+        .order('created_at', { ascending: false })
+        .limit(1000);
 
       if (pError) throw pError;
 

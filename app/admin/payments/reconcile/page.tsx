@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 type PendingOrder = {
   id: string;
@@ -30,14 +31,13 @@ type ReconcileResult = {
   };
 };
 
-async function getAuthHeaders() {
+async function getAuthHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token;
-  if (!token) throw new Error('Not signed in');
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  const headers: HeadersInit = { 'Content-Type': 'application/json' };
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  return headers;
 }
 
 export default function MoolreReconcilePage() {
@@ -55,12 +55,20 @@ export default function MoolreReconcilePage() {
     setError('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/admin/payment/moolre/reconcile?limit=60', { headers });
+      const res = await fetchWithTimeout(
+        '/api/admin/payment/moolre/reconcile?limit=60',
+        { headers, credentials: 'include', cache: 'no-store' },
+        25_000
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Failed to load pending orders');
       setOrders(data.orders || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to load');
+      const msg =
+        err?.name === 'AbortError'
+          ? 'Request timed out. Try again.'
+          : err.message || 'Failed to load';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -75,11 +83,16 @@ export default function MoolreReconcilePage() {
     setError('');
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/admin/payment/moolre/reconcile', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ orderNumber: target }),
-      });
+      const res = await fetchWithTimeout(
+        '/api/admin/payment/moolre/reconcile',
+        {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ orderNumber: target }),
+        },
+        45_000
+      );
       const data = await res.json();
       if (!res.ok && !data.result) {
         throw new Error(data.error || data.message || 'Reconcile failed');
@@ -104,18 +117,27 @@ export default function MoolreReconcilePage() {
     setSummary(null);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch('/api/admin/payment/moolre/reconcile', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ mode: 'pending', limit: 40 }),
-      });
+      const res = await fetchWithTimeout(
+        '/api/admin/payment/moolre/reconcile',
+        {
+          method: 'POST',
+          headers,
+          credentials: 'include',
+          body: JSON.stringify({ mode: 'pending', limit: 40 }),
+        },
+        120_000
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || data.message || 'Bulk reconcile failed');
       setSummary(data.summary || null);
       setResults(data.results || []);
       await loadPending();
     } catch (err: any) {
-      setError(err.message || 'Bulk reconcile failed');
+      const msg =
+        err?.name === 'AbortError'
+          ? 'Bulk reconcile timed out. Try again with fewer orders.'
+          : err.message || 'Bulk reconcile failed';
+      setError(msg);
     } finally {
       setBusy(false);
     }

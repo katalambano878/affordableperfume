@@ -121,7 +121,8 @@ export async function POST(req: Request) {
                 'X-API-USER': process.env.MOOLRE_API_USER,
                 'X-API-PUBKEY': process.env.MOOLRE_API_PUBKEY
             },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: AbortSignal.timeout(20_000),
         });
 
         const result = await response.json();

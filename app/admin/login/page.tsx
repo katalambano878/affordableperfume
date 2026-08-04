@@ -24,15 +24,13 @@ export default function AdminLoginPage() {
     setError('');
     setIsLoading(true);
 
-    // reCAPTCHA verification
-    const isHuman = await getToken('admin_login');
-    if (!isHuman) {
-      setError('Security verification failed. Please try again.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
+      const isHuman = await getToken('admin_login');
+      if (!isHuman) {
+        setError('Security verification failed. Please try again.');
+        return;
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password

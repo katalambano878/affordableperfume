@@ -1,20 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import { useState, useEffect, useCallback } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 export default function AdminDashboard() {
-  const [dateRange, setDateRange] = useState('7days'); // logic not implemented for this demo, just UI
+  const [dateRange, setDateRange] = useState('7days');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Real Stats
   const [stats, setStats] = useState([
     {
       title: 'Total Revenue',
       value: 'GH₵ 0.00',
-      change: '0%', // Placeholder trend
+      change: '0%',
       trend: 'up',
       icon: 'ri-money-dollar-circle-line',
       color: 'blue'
@@ -28,7 +28,7 @@ export default function AdminDashboard() {
       color: 'blue'
     },
     {
-      title: 'Customers', // This is total active users for us currently
+      title: 'Customers',
       value: '0',
       change: '0%',
       trend: 'up',
@@ -50,157 +50,118 @@ export default function AdminDashboard() {
   const [topProducts, setTopProducts] = useState<any[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
 
-  useEffect(() => {
-    async function fetchDashboardData() {
-      try {
-        // 1. Fetch ALL Orders for count & customers
-        const { data: allOrdersData, error: ordersError } = await supabase
-          .from('orders')
-          .select('total, status, payment_status, created_at, email');
+  const fetchDashboardData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Server-side aggregates — never pull the full orders table into the browser
+      const res = await fetchWithTimeout(
+        '/api/admin/dashboard/summary',
+        { credentials: 'include', cache: 'no-store' },
+        20_000
+      );
 
-        if (ordersError) throw ordersError;
-
-        // Only count PAID orders for revenue & avg order value
-        const paidOrders = allOrdersData?.filter(o => o.payment_status === 'paid') || [];
-        const totalRevenue = paidOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-        const totalOrders = allOrdersData?.length || 0;
-        const paidOrderCount = paidOrders.length;
-        const avgOrderValue = paidOrderCount > 0 ? totalRevenue / paidOrderCount : 0;
-
-        // 2. Fetch Customers Count (approximation using orders unique emails if we don't have user metrics access)
-        // Since we can't query auth.users directly from client, we'll estimate active customers via orders or just keep it 0 if we can't.
-        // Actually, best to just show "Orders" or "Recent Signups" if we had a public profiles table.
-        // We'll use unique emails from orders as a proxy for "Customers"
-        const uniqueCustomers = new Set(allOrdersData?.map(o => o.email)).size;
-
-
-        // Process Chart Data (Last 7 Days) - only count PAID orders as revenue
-        const last7Days = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - (6 - i));
-          return d.toISOString().split('T')[0];
-        });
-
-        const chartMap = last7Days.reduce((acc: any, date) => {
-          acc[date] = 0;
-          return acc;
-        }, {});
-
-        paidOrders.forEach(order => {
-          const date = new Date(order.created_at).toISOString().split('T')[0];
-          if (chartMap[date] !== undefined) {
-            chartMap[date] += (order.total || 0);
-          }
-        });
-
-        const processedChartData = Object.keys(chartMap).map(date => ({
-          date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-          revenue: chartMap[date]
-        }));
-        setChartData(processedChartData);
-
-        setStats([
-          {
-            title: 'Total Revenue',
-            value: `GH₵ ${totalRevenue.toFixed(2)}`,
-            change: '+0%', // Dynamic change requires date filtering logic which is complex
-            trend: 'up',
-            icon: 'ri-money-dollar-circle-line',
-            color: 'blue'
-          },
-          {
-            title: 'Orders',
-            value: totalOrders.toString(),
-            change: '+0%',
-            trend: 'up',
-            icon: 'ri-shopping-bag-line',
-            color: 'blue'
-          },
-          {
-            title: 'Customers (Active)',
-            value: uniqueCustomers.toString(), // Proxy
-            change: '+0%',
-            trend: 'up',
-            icon: 'ri-group-line',
-            color: 'purple'
-          },
-          {
-            title: 'Avg Order Value',
-            value: `GH₵ ${avgOrderValue.toFixed(2)}`,
-            change: '+0%',
-            trend: 'up',
-            icon: 'ri-line-chart-line',
-            color: 'amber'
-          }
-        ]);
-
-        // 3. Fetch Recent Orders (only paid orders)
-        const { data: recentOrdersData } = await supabase
-          .from('orders')
-          .select('id, order_number, user_id, email, created_at, total, status, shipping_address')
-          .eq('payment_status', 'paid')
-          .order('created_at', { ascending: false })
-          .limit(5);
-
-        if (recentOrdersData) {
-          const formattedRecent = recentOrdersData.map((o: any) => {
-            const addr = o.shipping_address || {};
-            const customerName = (addr.firstName && addr.lastName)
-              ? `${addr.firstName.trim()} ${addr.lastName.trim()}`
-              : addr.full_name || addr.firstName || o.email.split('@')[0];
-            return {
-              id: o.id,
-              displayId: o.order_number,
-              customer: customerName,
-              email: o.email,
-              date: new Date(o.created_at).toLocaleDateString(),
-              total: o.total,
-              status: o.status,
-              items: 1
-            };
-          });
-          setRecentOrders(formattedRecent);
-        }
-
-        // 4. Fetch Low Stock Products
-        const { data: lowStockData } = await supabase
-          .from('products')
-          .select('name, quantity')
-          .lt('quantity', 10)
-          .limit(5);
-
-        if (lowStockData) {
-          setLowStockProducts(lowStockData.map((p: any) => ({
-            name: p.name,
-            stock: p.quantity,
-            status: p.quantity === 0 ? 'critical' : 'low'
-          })));
-        }
-
-        // 5. Fetch Top Products (Approximation: High Price or just Random for now, 
-        // real top selling requires aggregation on order_items which is complex for client-side)
-        // real top selling requires aggregation on order_items which is complex for client-side)
-        const { data: productData } = await supabase.from('products').select('*, product_images(url)').limit(4);
-        if (productData) {
-          setTopProducts(productData.map((p: any) => ({
-            id: p.slug, // Use slug for link
-            name: p.name,
-            image: p.product_images?.[0]?.url || 'https://via.placeholder.com/200',
-            sales: 0, // Mocked for now
-            revenue: 0, // Mocked for now
-            stock: p.quantity
-          })));
-        }
-
-      } catch (error) {
-        console.error('Error loading dashboard:', error);
-      } finally {
-        setLoading(false);
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('Dashboard API returned a non-JSON response');
       }
-    }
 
-    fetchDashboardData();
+      const payload = await res.json();
+      if (!res.ok || payload.success === false) {
+        throw new Error(payload.error || `Dashboard failed (${res.status})`);
+      }
+
+      const s = payload.stats || {};
+      setStats([
+        {
+          title: 'Total Revenue',
+          value: `GH₵ ${Number(s.revenue || 0).toFixed(2)}`,
+          change: '+0%',
+          trend: 'up',
+          icon: 'ri-money-dollar-circle-line',
+          color: 'blue'
+        },
+        {
+          title: 'Orders',
+          value: String(s.totalOrders || 0),
+          change: '+0%',
+          trend: 'up',
+          icon: 'ri-shopping-bag-line',
+          color: 'blue'
+        },
+        {
+          title: 'Customers (Active)',
+          value: String(s.customers || 0),
+          change: '+0%',
+          trend: 'up',
+          icon: 'ri-group-line',
+          color: 'purple'
+        },
+        {
+          title: 'Avg Order Value',
+          value: `GH₵ ${Number(s.avgOrderValue || 0).toFixed(2)}`,
+          change: '+0%',
+          trend: 'up',
+          icon: 'ri-line-chart-line',
+          color: 'amber'
+        }
+      ]);
+
+      setChartData(payload.chart || []);
+
+      setRecentOrders(
+        (payload.recentOrders || []).map((o: any) => {
+          const addr = o.shipping_address || {};
+          const customerName =
+            addr.firstName && addr.lastName
+              ? `${addr.firstName.trim()} ${addr.lastName.trim()}`
+              : addr.full_name || addr.firstName || (o.email || '').split('@')[0] || 'Customer';
+          return {
+            id: o.id,
+            displayId: o.order_number,
+            customer: customerName,
+            email: o.email,
+            date: new Date(o.created_at).toLocaleDateString(),
+            total: Number(o.total) || 0,
+            status: o.status,
+            items: 1
+          };
+        })
+      );
+
+      setLowStockProducts(
+        (payload.lowStock || []).map((p: any) => ({
+          name: p.name,
+          stock: p.quantity,
+          status: p.quantity === 0 ? 'critical' : 'low'
+        }))
+      );
+
+      setTopProducts(
+        (payload.topProducts || []).map((p: any) => ({
+          id: p.slug || p.id,
+          name: p.name,
+          image: p.image || 'https://via.placeholder.com/200',
+          sales: 0,
+          revenue: 0,
+          stock: p.quantity
+        }))
+      );
+    } catch (err: any) {
+      console.error('Error loading dashboard:', err);
+      const msg =
+        err?.name === 'AbortError'
+          ? 'Dashboard request timed out. Please try again.'
+          : err?.message || 'Failed to load dashboard';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const statusColors: any = {
     'pending': 'bg-amber-100 text-amber-700',
@@ -231,6 +192,22 @@ export default function AdminDashboard() {
 
   if (loading) {
     return <div className="p-8 text-center text-gray-500">Loading Dashboard...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-gray-800 font-semibold mb-2">Unable to load dashboard</p>
+        <p className="text-gray-600 text-sm mb-4">{error}</p>
+        <button
+          type="button"
+          onClick={() => fetchDashboardData()}
+          className="px-4 py-2 bg-blue-700 text-white rounded-lg text-sm cursor-pointer"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   return (

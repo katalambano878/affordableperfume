@@ -56,7 +56,9 @@ export async function testSmsAction(phone: string, message: string, authToken: s
                     .eq('key', 'site_name')
                     .maybeSingle();
                 if (settings?.value) senderId = settings.value.substring(0, 11);
-            } catch (e) { }
+            } catch (e) {
+                console.warn('[test-sms] site_name lookup failed', e);
+            }
         }
 
         // Make API call per Moolre documentation
@@ -75,7 +77,8 @@ export async function testSmsAction(phone: string, message: string, authToken: s
                         message: message
                     }
                 ]
-            })
+            }),
+            signal: AbortSignal.timeout(15_000),
         });
 
         const responseText = await response.text();

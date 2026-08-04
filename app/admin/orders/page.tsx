@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import ProductSalesStats from './ProductSalesStats';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 interface Order {
   id: string;
@@ -89,11 +90,15 @@ export default function AdminOrdersPage() {
           return;
         }
 
-        const res = await fetch(`/api/admin/orders/search?q=${encodeURIComponent(query)}`, {
-          headers: { Authorization: `Bearer ${token}` },
-          credentials: 'include',
-          cache: 'no-store',
-        });
+        const res = await fetchWithTimeout(
+          `/api/admin/orders/search?q=${encodeURIComponent(query)}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: 'include',
+            cache: 'no-store',
+          },
+          15_000
+        );
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Search failed');
         setSearchResults(payload.orders || []);
@@ -130,11 +135,11 @@ export default function AdminOrdersPage() {
   const fetchOrderStats = useCallback(async () => {
     try {
       const headers = await getAdminAuthHeaders();
-      const res = await fetch('/api/admin/orders/stats', {
-        headers,
-        credentials: 'include',
-        cache: 'no-store',
-      });
+      const res = await fetchWithTimeout(
+        '/api/admin/orders/stats',
+        { headers, credentials: 'include', cache: 'no-store' },
+        20_000
+      );
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || 'Stats failed');
 
@@ -173,9 +178,10 @@ export default function AdminOrdersPage() {
 
       const from = reset ? 0 : nextOffsetRef.current;
       const headers = await getAdminAuthHeaders();
-      const res = await fetch(
+      const res = await fetchWithTimeout(
         `/api/admin/orders/list?offset=${from}&limit=${ORDERS_PAGE_SIZE}`,
-        { headers, credentials: 'include', cache: 'no-store' }
+        { headers, credentials: 'include', cache: 'no-store' },
+        25_000
       );
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || 'Failed to load orders');

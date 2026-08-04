@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import { executeRecaptcha } from '@/lib/recaptcha';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 
 /**
  * React hook for reCAPTCHA v3 integration.
@@ -37,12 +38,16 @@ export function useRecaptcha() {
             return true;
         }
 
-            // Verify on server side
-            const response = await fetch('/api/recaptcha/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token, action }),
-            });
+            // Verify on server side (timeout so login never sticks on "verifying")
+            const response = await fetchWithTimeout(
+                '/api/recaptcha/verify',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, action }),
+                },
+                10_000
+            );
 
             const result = await response.json();
             if (!result.success) {

@@ -1,10 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useCMS } from '@/context/CMSContext';
+
+const PROFILE_TIMEOUT_MS = 12_000;
+
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 export default function AdminLayout({
   children,
@@ -13,9 +31,13 @@ export default function AdminLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const pathnameRef = useRef(pathname);
+  pathnameRef.current = pathname;
+
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [user, setUser] = useState<any>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -25,53 +47,69 @@ export default function AdminLayout({
   const { getSetting } = useCMS();
   const siteName = getSetting('site_name') || '';
 
+  // Auth when entering protected admin routes. Do NOT depend on full pathname —
+  // that re-ran profile lookup on every nav and could leave "Loading Admin..." stuck.
+  const isLoginPage = pathname === '/admin/login';
+
   useEffect(() => {
-    if (pathname === '/admin/login') {
+    if (isLoginPage) {
       setIsLoading(false);
+      setAuthError(null);
       return;
     }
 
     let mounted = true;
+    setIsLoading(true);
 
     async function handleSession(session: any) {
       if (!mounted) return;
 
       if (!session) {
         setIsLoading(false);
+        setAuthError(null);
         router.push('/admin/login');
         return;
       }
 
+      setAuthError(null);
       document.cookie = `sb-access-token=${session.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', session.user.id)
-        .single();
+      try {
+        const { data: profile, error: profileError } = await withTimeout(
+          supabase.from('profiles').select('role').eq('id', session.user.id).single(),
+          PROFILE_TIMEOUT_MS,
+          'Admin profile lookup'
+        );
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (profileError || !profile) {
-        console.error('Failed to fetch user profile');
-        setIsLoading(false);
-        router.push('/admin/login');
-        return;
+        if (profileError || !profile) {
+          console.error('Failed to fetch user profile', profileError);
+          setIsAuthenticated(false);
+          router.push('/admin/login');
+          return;
+        }
+
+        if (profile.role !== 'admin' && profile.role !== 'staff') {
+          console.warn('User does not have admin/staff role');
+          document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
+          await supabase.auth.signOut();
+          setIsAuthenticated(false);
+          router.push('/admin/login?error=unauthorized');
+          return;
+        }
+
+        setUser(session.user);
+        setUserRole(profile.role);
+        setIsAuthenticated(true);
+      } catch (err: any) {
+        console.error('[AdminLayout] session check failed:', err?.message || err);
+        if (!mounted) return;
+        setIsAuthenticated(false);
+        setAuthError(err?.message || 'Could not verify admin session');
+      } finally {
+        if (mounted) setIsLoading(false);
       }
-
-      if (profile.role !== 'admin' && profile.role !== 'staff') {
-        console.warn('User does not have admin/staff role');
-        document.cookie = 'sb-access-token=; path=/; max-age=0; SameSite=Lax';
-        await supabase.auth.signOut();
-        setIsLoading(false);
-        router.push('/admin/login?error=unauthorized');
-        return;
-      }
-
-      setUser(session.user);
-      setUserRole(profile.role);
-      setIsAuthenticated(true);
-      setIsLoading(false);
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -87,21 +125,30 @@ export default function AdminLayout({
         setIsAuthenticated(false);
         setUser(null);
         setUserRole(null);
-        if (pathname !== '/admin/login') {
+        setIsLoading(false);
+        if (pathnameRef.current !== '/admin/login') {
           router.push('/admin/login');
         }
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (mounted) handleSession(session);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        if (mounted) return handleSession(session);
+      })
+      .catch((err) => {
+        console.error('[AdminLayout] getSession failed:', err);
+        if (mounted) {
+          setAuthError('Session check failed');
+          setIsLoading(false);
+        }
+      });
 
     return () => {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [pathname, router]);
+  }, [isLoginPage, router]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -165,6 +212,31 @@ export default function AdminLayout({
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-gray-500">Loading Admin...</div>;
+  }
+
+  if (authError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 px-4 text-center">
+        <p className="text-gray-800 font-semibold mb-2">Admin session check failed</p>
+        <p className="text-gray-600 text-sm mb-4 max-w-md">{authError}</p>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-blue-700 text-white rounded-lg text-sm cursor-pointer"
+          >
+            Retry
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push('/admin/login')}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm cursor-pointer"
+          >
+            Back to login
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {

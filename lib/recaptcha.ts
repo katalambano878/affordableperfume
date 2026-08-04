@@ -20,18 +20,24 @@ export async function executeRecaptcha(action: string): Promise<string | null> {
     }
 
     try {
-        // Wait for grecaptcha to be ready
+        // Wait for grecaptcha to be ready — never hang forever (blocks login buttons)
         return await new Promise<string>((resolve, reject) => {
             const w = window as any;
+            const timer = setTimeout(() => reject(new Error('reCAPTCHA timed out')), 8_000);
+            const done = (fn: (v: any) => void) => (v: any) => {
+                clearTimeout(timer);
+                fn(v);
+            };
             if (!w.grecaptcha) {
+                clearTimeout(timer);
                 reject(new Error('reCAPTCHA script not loaded'));
                 return;
             }
             w.grecaptcha.ready(() => {
                 w.grecaptcha
                     .execute(RECAPTCHA_SITE_KEY, { action })
-                    .then(resolve)
-                    .catch(reject);
+                    .then(done(resolve))
+                    .catch(done(reject));
             });
         });
     } catch (error) {
@@ -65,6 +71,7 @@ export async function verifyRecaptcha(
                 secret: RECAPTCHA_SECRET_KEY,
                 response: token,
             }),
+            signal: AbortSignal.timeout(10_000),
         });
 
         const data = await response.json();
