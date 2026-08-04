@@ -1,5 +1,5 @@
-// Store Service Worker v2.2
-const CACHE_VERSION = 'sl-v2.2';
+// Store Service Worker v2.3 — network-first for JS/CSS so admin UI never sticks on stale chunks
+const CACHE_VERSION = 'sl-v2.3';
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 const IMAGE_CACHE = `images-${CACHE_VERSION}`;
 const API_CACHE = `api-${CACHE_VERSION}`;
@@ -27,7 +27,7 @@ async function trimCache(cacheName, maxItems) {
 
 // Install: pre-cache static assets
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing v2.2...');
+  console.log('[SW] Installing v2.3...');
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then((cache) => {
@@ -44,7 +44,7 @@ self.addEventListener('install', (event) => {
 
 // Activate: clean old caches
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating v2.2...');
+  console.log('[SW] Activating v2.3...');
   event.waitUntil(
     caches.keys()
       .then((keys) => {
@@ -153,10 +153,28 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Strategy: Static assets (JS, CSS, fonts) - Cache First
+  // Strategy: JS/CSS — Network First (avoids stale admin bundles after deploy)
   if (
     url.pathname.startsWith('/_next/static') ||
-    url.pathname.match(/\.(js|css|woff|woff2|ttf|eot)$/) ||
+    url.pathname.match(/\.(js|css)$/)
+  ) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const responseClone = response.clone();
+            caches.open(STATIC_CACHE).then((cache) => cache.put(request, responseClone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // Fonts — Cache First
+  if (
+    url.pathname.match(/\.(woff|woff2|ttf|eot)$/) ||
     url.hostname === 'fonts.googleapis.com' ||
     url.hostname === 'fonts.gstatic.com' ||
     url.hostname === 'cdn.jsdelivr.net'

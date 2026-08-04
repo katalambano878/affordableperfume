@@ -63,6 +63,7 @@ export default function AdminOrdersPage() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [hasMoreOrders, setHasMoreOrders] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const ORDERS_PAGE_SIZE = 100;
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const nextOffsetRef = useRef(0);
@@ -90,6 +91,8 @@ export default function AdminOrdersPage() {
 
         const res = await fetch(`/api/admin/orders/search?q=${encodeURIComponent(query)}`, {
           headers: { Authorization: `Bearer ${token}` },
+          credentials: 'include',
+          cache: 'no-store',
         });
         const payload = await res.json();
         if (!res.ok) throw new Error(payload.error || 'Search failed');
@@ -115,14 +118,22 @@ export default function AdminOrdersPage() {
     setAvailableProducts(Array.from(productNames).sort());
   };
 
+  const getAdminAuthHeaders = useCallback(async (): Promise<HeadersInit> => {
+    const { data: { session } } = await supabase.auth.getSession();
+    const headers: HeadersInit = {};
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+    return headers;
+  }, []);
+
   const fetchOrderStats = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
+      const headers = await getAdminAuthHeaders();
       const res = await fetch('/api/admin/orders/stats', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers,
+        credentials: 'include',
+        cache: 'no-store',
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || 'Stats failed');
@@ -142,7 +153,7 @@ export default function AdminOrdersPage() {
     } catch (err) {
       console.error('Order stats failed:', err);
     }
-  }, []);
+  }, [getAdminAuthHeaders]);
 
   const fetchOrders = useCallback(async (reset = false) => {
     if (!reset && (loadingMoreRef.current || !hasMoreRef.current)) return;
@@ -150,6 +161,7 @@ export default function AdminOrdersPage() {
     try {
       if (reset) {
         setLoading(true);
+        setLoadError(null);
         initialLoadingRef.current = true;
         nextOffsetRef.current = 0;
         hasMoreRef.current = true;
@@ -160,35 +172,16 @@ export default function AdminOrdersPage() {
       }
 
       const from = reset ? 0 : nextOffsetRef.current;
-      const to = from + ORDERS_PAGE_SIZE - 1;
+      const headers = await getAdminAuthHeaders();
+      const res = await fetch(
+        `/api/admin/orders/list?offset=${from}&limit=${ORDERS_PAGE_SIZE}`,
+        { headers, credentials: 'include', cache: 'no-store' }
+      );
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || 'Failed to load orders');
 
-      const { data: ordersData, error } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          email,
-          total,
-          status,
-          payment_status,
-          payment_method,
-          shipping_method,
-          created_at,
-          phone,
-          shipping_address,
-          metadata,
-          order_items (
-            quantity,
-            product_name
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-
-      const page = ordersData || [];
-      const more = page.length === ORDERS_PAGE_SIZE;
+      const page = (payload.orders || []) as Order[];
+      const more = Boolean(payload.hasMore ?? page.length === ORDERS_PAGE_SIZE);
       hasMoreRef.current = more;
       setHasMoreOrders(more);
       nextOffsetRef.current = from + page.length;
@@ -203,15 +196,17 @@ export default function AdminOrdersPage() {
         updateLoadedProductFilter(allOrders);
         return allOrders;
       });
-    } catch (error) {
+      setLoadError(null);
+    } catch (error: any) {
       console.error('Error fetching orders:', error);
+      setLoadError(error?.message || 'Failed to load orders');
     } finally {
       initialLoadingRef.current = false;
       setLoading(false);
       loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, []);
+  }, [getAdminAuthHeaders]);
 
   useEffect(() => {
     fetchOrderStats();
@@ -524,6 +519,22 @@ export default function AdminOrdersPage() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <span>Could not load orders: {loadError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              fetchOrderStats();
+              fetchOrders(true);
+            }}
+            className="px-3 py-1.5 rounded-md bg-red-700 text-white font-medium hover:bg-red-800"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* View Tabs */}
       <div className="flex border-b border-gray-200 overflow-x-auto">

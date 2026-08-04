@@ -13,6 +13,26 @@ export interface AuthResult {
   error?: string;
 }
 
+/** Prefer Authorization bearer; fall back to sb-access-token cookie (admin UI). */
+export function extractRequestAccessToken(request: Request): string | null {
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.toLowerCase().startsWith('bearer ')) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer) return bearer;
+  }
+
+  const cookieHeader = request.headers.get('cookie') || '';
+  const match = cookieHeader.match(/(?:^|;\s*)sb-access-token=([^;]+)/);
+  if (match?.[1]) {
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return match[1];
+    }
+  }
+  return null;
+}
+
 /**
  * Verify that the request has a valid session
  * and optionally check for admin/staff role.
@@ -21,8 +41,7 @@ export async function verifyAuth(
   request: Request,
   options: { requireAdmin?: boolean } = {}
 ): Promise<AuthResult> {
-  const authHeader = request.headers.get('authorization');
-  const token = authHeader?.replace('Bearer ', '');
+  const token = extractRequestAccessToken(request);
 
   if (!token) {
     return { authenticated: false, error: 'Missing authorization token' };

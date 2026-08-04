@@ -25,13 +25,13 @@ export async function GET(request: Request) {
       }>(`
         SELECT
           COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE payment_status = 'paid')::int AS paid,
-          COUNT(*) FILTER (WHERE payment_status IS DISTINCT FROM 'paid')::int AS awaiting,
-          COUNT(*) FILTER (WHERE status = 'pending')::int AS pending,
-          COUNT(*) FILTER (WHERE status = 'processing')::int AS processing,
-          COUNT(*) FILTER (WHERE status = 'shipped')::int AS shipped,
-          COUNT(*) FILTER (WHERE status = 'delivered')::int AS delivered,
-          COUNT(*) FILTER (WHERE status = 'cancelled')::int AS cancelled
+          COUNT(*) FILTER (WHERE payment_status::text = 'paid')::int AS paid,
+          COUNT(*) FILTER (WHERE payment_status::text IS DISTINCT FROM 'paid')::int AS awaiting,
+          COUNT(*) FILTER (WHERE status::text = 'pending')::int AS pending,
+          COUNT(*) FILTER (WHERE status::text = 'processing')::int AS processing,
+          COUNT(*) FILTER (WHERE status::text = 'shipped')::int AS shipped,
+          COUNT(*) FILTER (WHERE status::text = 'delivered')::int AS delivered,
+          COUNT(*) FILTER (WHERE status::text = 'cancelled')::int AS cancelled
         FROM orders
       `);
 
