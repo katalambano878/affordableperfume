@@ -270,26 +270,28 @@ export async function POST(req: Request) {
                 })
             );
 
-            // Update customer stats
-            try {
-                if (orderJson.email) {
-                    await supabaseAdmin.rpc('update_customer_stats', {
-                        p_customer_email: orderJson.email,
-                        p_order_total: orderJson.total
-                    });
+            // ACK Moolre immediately — never block callback success on SMS/email/stats.
+            // Secondary work runs in the background on this long-lived Node process.
+            void (async () => {
+                try {
+                    if (orderJson.email) {
+                        await supabaseAdmin.rpc('update_customer_stats', {
+                            p_customer_email: orderJson.email,
+                            p_order_total: orderJson.total
+                        });
+                    }
+                } catch (statsError: any) {
+                    console.error('[Callback] Customer stats failed:', statsError.message);
                 }
-            } catch (statsError: any) {
-                console.error('[Callback] Customer stats failed:', statsError.message);
-            }
 
-            // Send SMS + Email notifications
-            try {
-                console.log('[Callback] Sending notifications for:', orderJson.order_number);
-                await sendOrderConfirmation(orderJson);
-                console.log('[Callback] Notifications sent!');
-            } catch (notifyError: any) {
-                console.error('[Callback] Notification failed:', notifyError.message);
-            }
+                try {
+                    console.log('[Callback] Sending notifications for:', orderJson.order_number);
+                    await sendOrderConfirmation(orderJson);
+                    console.log('[Callback] Notifications sent!');
+                } catch (notifyError: any) {
+                    console.error('[Callback] Notification failed:', notifyError.message);
+                }
+            })();
 
             return NextResponse.json({ success: true, message: 'Payment verified and Order Updated' });
 

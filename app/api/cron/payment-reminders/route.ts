@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { sendPaymentLink } from '@/lib/notifications';
+import { listPendingMoolreOrders, reconcileMoolreOrder } from '@/lib/payment/moolre';
 
 // This endpoint is called by a cron job to send payment reminders
 // for orders that haven't been paid within 15 minutes
@@ -15,6 +16,23 @@ export async function GET(request: Request) {
     }
 
     const supabase = supabaseAdmin;
+
+    // First: catch paid-but-pending orders when Moolre callback was missed
+    let reconciled = 0;
+    try {
+      const pendingForReconcile = await listPendingMoolreOrders(25);
+      for (const order of pendingForReconcile) {
+        const result = await reconcileMoolreOrder(order.order_number, {
+          sendNotifications: true,
+        });
+        if (result.verdict === 'marked_paid') {
+          reconciled += 1;
+          console.log('[Payment Reminders] Reconciled paid order', order.order_number);
+        }
+      }
+    } catch (reconcileErr: any) {
+      console.error('[Payment Reminders] Reconcile pass failed:', reconcileErr?.message);
+    }
 
     const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
 
@@ -36,7 +54,8 @@ export async function GET(request: Request) {
       return NextResponse.json({ 
         success: true, 
         message: 'No pending reminders to send',
-        processed: 0 
+        processed: 0,
+        reconciled,
       });
     }
 
@@ -71,7 +90,8 @@ export async function GET(request: Request) {
       success: true, 
       message: `Processed ${pendingOrders.length} orders`,
       sent,
-      failed
+      failed,
+      reconciled,
     });
 
   } catch (error: any) {

@@ -68,8 +68,20 @@ export async function POST(req: Request) {
         // Generate a unique external reference for Moolre
         const uniqueRef = `${orderRef}-R${Date.now()}`;
 
-        // Persist Moolre ref so verify/status checks can find this payment attempt
+        // Persist Moolre ref so verify/status checks can find this payment attempt.
+        // Keep prior refs — overwriting alone made reconcile miss older successful pays.
         const existingMeta = (order.metadata && typeof order.metadata === 'object') ? order.metadata : {};
+        const priorRefs = Array.isArray(existingMeta.moolre_payment_refs)
+            ? existingMeta.moolre_payment_refs.filter((r: unknown) => typeof r === 'string')
+            : [];
+        if (
+            typeof existingMeta.moolre_payment_ref === 'string' &&
+            !priorRefs.includes(existingMeta.moolre_payment_ref)
+        ) {
+            priorRefs.push(existingMeta.moolre_payment_ref);
+        }
+        if (!priorRefs.includes(uniqueRef)) priorRefs.push(uniqueRef);
+
         await supabaseAdmin
             .from('orders')
             .update({
@@ -77,6 +89,7 @@ export async function POST(req: Request) {
                     ...existingMeta,
                     payment_method: 'moolre',
                     moolre_payment_ref: uniqueRef,
+                    moolre_payment_refs: priorRefs.slice(-20),
                 },
                 payment_method: 'moolre',
                 payment_provider: 'moolre',

@@ -119,10 +119,21 @@ export function orderRefsForMoolre(order: {
   metadata?: Record<string, unknown> | null;
 }): string[] {
   const meta = order.metadata || {};
-  const paymentRef = meta.moolre_payment_ref;
-  return [typeof paymentRef === 'string' ? paymentRef : null, order.order_number].filter(
-    (ref): ref is string => typeof ref === 'string' && ref.length > 0
-  );
+  const refs: string[] = [];
+  const push = (value: unknown) => {
+    if (typeof value === 'string' && value.length > 0 && !refs.includes(value)) {
+      refs.push(value);
+    }
+  };
+
+  // Newest first — latest initiate is the most likely successful attempt
+  push(meta.moolre_payment_ref);
+  if (Array.isArray(meta.moolre_payment_refs)) {
+    for (const r of [...meta.moolre_payment_refs].reverse()) push(r);
+  }
+  push(meta.moolre_reference);
+  push(order.order_number);
+  return refs;
 }
 
 /**
@@ -189,7 +200,21 @@ export async function reconcileMoolreOrder(
     };
   }
 
+  // Include every payment_attempt ref — retries overwrite metadata.moolre_payment_ref
+  const { data: attempts } = await supabaseAdmin
+    .from('payment_attempts')
+    .select('internal_ref, gateway_ref')
+    .eq('order_number', orderNumber)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
   const refs = orderRefsForMoolre(order);
+  for (const attempt of attempts || []) {
+    if (typeof attempt.internal_ref === 'string' && !refs.includes(attempt.internal_ref)) {
+      refs.push(attempt.internal_ref);
+    }
+  }
+
   let lastPayload: MoolreStatusResult | null = null;
   let usedRef: string | undefined;
   let moolreRef: string | undefined;
