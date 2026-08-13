@@ -206,6 +206,85 @@ export async function sendSMS({ to, message, senderId }: { to: string; message: 
     }
 }
 
+/**
+ * Send the order number as soon as checkout creates the order (before MoMo).
+ * Does NOT stamp confirmation_sent_at — that is reserved for paid confirmation.
+ */
+export async function sendOrderNumberIssued(order: any) {
+    const brand = await getBrand();
+    const { id, email, phone: orderPhone, shipping_address, total, order_number, metadata } = order;
+
+    if (metadata?.order_number_sent_at) {
+        console.log(`[Notification] Skipping duplicate order-number SMS for #${order_number}`);
+        return { skipped: true, reason: 'already_sent' };
+    }
+
+    const getName = () => {
+        if (shipping_address?.full_name) return shipping_address.full_name;
+        if (shipping_address?.firstName) {
+            return shipping_address.lastName
+                ? `${shipping_address.firstName} ${shipping_address.lastName}`
+                : shipping_address.firstName;
+        }
+        if (metadata?.first_name) {
+            return metadata.last_name
+                ? `${metadata.first_name} ${metadata.last_name}`
+                : metadata.first_name;
+        }
+        return 'Customer';
+    };
+    const name = getName();
+    const phone = orderPhone || shipping_address?.phone;
+    const baseUrl = brand.url;
+    const emailFrom = `${brand.emailName} <noreply@${baseUrl.replace(/https?:\/\//, '').split('/')[0]}>`;
+    const trackingUrl = `${baseUrl}/order-tracking?order=${order_number || id}`;
+
+    try {
+        const existingMeta =
+            metadata && typeof metadata === 'object' ? { ...metadata } : {};
+        await serverDb
+            .from('orders')
+            .update({
+                metadata: {
+                    ...existingMeta,
+                    order_number_sent_at: new Date().toISOString(),
+                },
+            })
+            .eq('id', id);
+    } catch (err: any) {
+        console.warn('[Notification] Could not stamp order_number_sent_at:', err?.message);
+    }
+
+    if (email) {
+        await resend.emails.send({
+            from: emailFrom,
+            to: email,
+            subject: `Your order number #${order_number}`,
+            html: emailLayout(`
+<div style="text-align:center;margin-bottom:24px;">
+  <h2 style="margin:0 0 4px;color:#111827;font-size:22px;">Order created</h2>
+  <p style="margin:0;color:#6b7280;font-size:14px;">Hi ${name}, save this order number.</p>
+</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f9fafb;border-radius:12px;overflow:hidden;margin:20px 0;">
+  ${emailInfoRow('Order Number', `#${order_number || id}`)}
+  ${emailInfoRow('Amount', `GH₵${Number(total).toFixed(2)}`)}
+</table>
+<p style="color:#374151;font-size:14px;line-height:1.6;margin:16px 0;">Complete Mobile Money payment to confirm your order. You can track it anytime with this number.</p>
+${emailButton('Track Your Order', trackingUrl, brand)}
+`, brand, `Your order number is #${order_number}`),
+        });
+    }
+
+    if (phone) {
+        await sendSMS({
+            to: phone,
+            message: `Hi ${name}, your order number is #${order_number} (GH₵${Number(total).toFixed(2)}). Complete MoMo payment to confirm. Track: ${trackingUrl}`,
+        });
+    }
+
+    return { skipped: false };
+}
+
 export async function sendOrderConfirmation(order: any) {
     const brand = await getBrand();
     const { id, email, phone: orderPhone, shipping_address, total, created_at, order_number, metadata } = order;

@@ -256,6 +256,35 @@ export async function POST(req: Request) {
                 gatewayRef: String(moolreReference),
                 amountPaid: callbackAmount,
             });
+
+            // Persist MoMo SMS Transaction Id for receipt matching
+            const thirdpartyref = data.thirdpartyref ?? body.thirdpartyref;
+            if (thirdpartyref && orderJson.id) {
+                try {
+                    const prevMeta =
+                        orderJson.metadata && typeof orderJson.metadata === 'object'
+                            ? orderJson.metadata
+                            : {};
+                    const { data: refreshed } = await supabaseAdmin
+                        .from('orders')
+                        .update({
+                            metadata: {
+                                ...prevMeta,
+                                moolre_thirdpartyref: String(thirdpartyref),
+                                moolre_payer: data.payer ? String(data.payer) : prevMeta.moolre_payer,
+                            },
+                        })
+                        .eq('id', orderJson.id)
+                        .select('metadata')
+                        .maybeSingle();
+                    if (refreshed?.metadata) {
+                        orderJson.metadata = refreshed.metadata;
+                    }
+                } catch (metaErr: any) {
+                    console.warn('[Callback] Could not store thirdpartyref:', metaErr?.message);
+                }
+            }
+
             await finalizeCallbackEvent({ id: callbackRecord.id }, 'processed');
 
             console.log(
@@ -265,6 +294,7 @@ export async function POST(req: Request) {
                     id: orderJson.id,
                     status: orderJson.status,
                     moolreRef: String(moolreReference),
+                    thirdpartyref: thirdpartyref ? String(thirdpartyref) : undefined,
                     amount: callbackAmount,
                     verdict: 'marked_paid',
                 })

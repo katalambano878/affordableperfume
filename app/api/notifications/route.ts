@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { verifyAuth } from '@/lib/auth';
 import { escapeHtml } from '@/lib/sanitize';
-import { sendOrderConfirmation, sendOrderStatusUpdate, sendWelcomeMessage, sendContactMessage, sendPaymentLink, sendEmail, sendSMS, emailLayout } from '@/lib/notifications';
+import { sendOrderConfirmation, sendOrderNumberIssued, sendOrderStatusUpdate, sendWelcomeMessage, sendContactMessage, sendPaymentLink, sendEmail, sendSMS, emailLayout } from '@/lib/notifications';
 import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from '@/lib/rate-limit';
 
 export async function POST(request: Request) {
@@ -48,10 +48,11 @@ export async function POST(request: Request) {
         }
 
         // ============================================================
-        // order_created — verify the order exists in the database
+        // order_created / order_number — verify the order exists
+        // order_number = early ORD ack (before MoMo); does not mean paid
+        // order_created = full confirmation (COD / already-paid flows)
         // ============================================================
-        if (type === 'order_created') {
-            // Verify the order actually exists before sending confirmation
+        if (type === 'order_created' || type === 'order_number') {
             if (!payload.order_number && !payload.id) {
                 return NextResponse.json({ error: 'Missing order identifier' }, { status: 400 });
             }
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
             const orderRef = payload.order_number || payload.id;
             const { data: order, error: orderError } = await supabaseAdmin
                 .from('orders')
-                .select('id, order_number, created_at')
+                .select('id, order_number, created_at, email, phone, total, shipping_address, metadata, payment_status')
                 .or(`order_number.eq.${orderRef},id.eq.${orderRef}`)
                 .single();
 
@@ -70,10 +71,17 @@ export async function POST(request: Request) {
             // Verify the order was created recently (within last 10 minutes)
             const orderAge = Date.now() - new Date(order.created_at).getTime();
             if (orderAge > 10 * 60 * 1000) {
-                return NextResponse.json({ error: 'Order confirmation can only be sent for recent orders' }, { status: 400 });
+                return NextResponse.json({ error: 'Order notification can only be sent for recent orders' }, { status: 400 });
             }
 
-            await sendOrderConfirmation(payload);
+            const orderPayload = { ...order, ...payload, id: order.id, order_number: order.order_number };
+
+            if (type === 'order_number') {
+                await sendOrderNumberIssued(orderPayload);
+                return NextResponse.json({ success: true, message: 'Order number sent' });
+            }
+
+            await sendOrderConfirmation(orderPayload);
             return NextResponse.json({ success: true, message: 'Order confirmation sent' });
         }
 

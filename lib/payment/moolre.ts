@@ -218,6 +218,7 @@ export async function reconcileMoolreOrder(
   let lastPayload: MoolreStatusResult | null = null;
   let usedRef: string | undefined;
   let moolreRef: string | undefined;
+  let matchedThirdparty: string | undefined;
   let amountMismatch = false;
   let missingAmount = false;
 
@@ -235,6 +236,7 @@ export async function reconcileMoolreOrder(
           txstatus: payload.data?.txstatus ?? payload.data?.txtstatus,
           amount: payload.data?.amount,
           transactionid: payload.data?.transactionid,
+          thirdpartyref: payload.data?.thirdpartyref,
         })
       );
 
@@ -256,6 +258,9 @@ export async function reconcileMoolreOrder(
       moolreRef = String(
         payload.data?.transactionid || payload.data?.thirdpartyref || externalref || 'moolre-reconcile'
       );
+      if (payload.data?.thirdpartyref != null) {
+        matchedThirdparty = String(payload.data.thirdpartyref);
+      }
       break;
     } catch (err: any) {
       console.warn('[MoolreReconcile] status error', orderNumber, err?.message);
@@ -336,6 +341,29 @@ export async function reconcileMoolreOrder(
     gatewayRef: moolreRef,
     amountPaid: Number(order.total),
   });
+
+  if (matchedThirdparty && orderJson?.id) {
+    try {
+      const prevMeta =
+        orderJson.metadata && typeof orderJson.metadata === 'object' ? orderJson.metadata : {};
+      const { data: refreshed } = await supabaseAdmin
+        .from('orders')
+        .update({
+          metadata: {
+            ...prevMeta,
+            moolre_thirdpartyref: matchedThirdparty,
+          },
+        })
+        .eq('id', orderJson.id)
+        .select('metadata')
+        .maybeSingle();
+      if (refreshed?.metadata) {
+        orderJson.metadata = refreshed.metadata;
+      }
+    } catch (metaErr: any) {
+      console.warn('[MoolreReconcile] Could not store thirdpartyref:', metaErr?.message);
+    }
+  }
 
   if (orderJson?.email) {
     try {

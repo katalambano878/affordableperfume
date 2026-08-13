@@ -417,6 +417,16 @@ export default function CheckoutPage() {
       // 4. Handle Payment Redirects or Completion
       if (paymentMethod === 'moolre') {
         try {
+          // Send order number now (before MoMo) so a missed callback never leaves the customer without ORD-
+          fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'order_number',
+              payload: order,
+            }),
+          }).catch((err) => console.error('Order number notification error:', err));
+
           // Payment link reminder will be sent automatically after 15 mins if unpaid (via cron)
 
           const paymentRes = await fetch('/api/payment/moolre', {
@@ -437,6 +447,7 @@ export default function CheckoutPage() {
 
           // Clear cart before redirecting
           clearCart();
+          if (typeof window !== 'undefined') localStorage.removeItem('wholesale_cart');
 
           // Redirect to Moolre
           window.location.href = paymentResult.url;
