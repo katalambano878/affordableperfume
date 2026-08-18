@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { verifyCronAuth } from '@/lib/cron-auth';
 import { sendPaymentLink } from '@/lib/notifications';
 import { listPendingMoolreOrders, reconcileMoolreOrder } from '@/lib/payment/moolre';
 
@@ -7,11 +8,8 @@ import { listPendingMoolreOrders, reconcileMoolreOrder } from '@/lib/payment/moo
 // for orders that haven't been paid within 15 minutes
 export async function GET(request: Request) {
   try {
-    // Verify cron secret to prevent unauthorized access
-    const authHeader = request.headers.get('authorization');
-    const cronSecret = process.env.CRON_SECRET;
-    
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    const auth = verifyCronAuth(request);
+    if (!auth.ok) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -20,7 +18,10 @@ export async function GET(request: Request) {
     // First: catch paid-but-pending orders when Moolre callback was missed
     let reconciled = 0;
     try {
-      const pendingForReconcile = await listPendingMoolreOrders(25);
+      const pendingForReconcile = await listPendingMoolreOrders(25, {
+        days: 14,
+        preferAttempted: true,
+      });
       for (const order of pendingForReconcile) {
         const result = await reconcileMoolreOrder(order.order_number, {
           sendNotifications: true,

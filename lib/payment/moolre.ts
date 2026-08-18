@@ -414,22 +414,40 @@ export type PendingMoolreOrder = {
   created_at: string;
 };
 
-export async function listPendingMoolreOrders(limit = 50): Promise<PendingMoolreOrder[]> {
+export async function listPendingMoolreOrders(
+  limit = 50,
+  options?: { days?: number; preferAttempted?: boolean }
+): Promise<PendingMoolreOrder[]> {
   const capped = Math.min(Math.max(limit, 1), 100);
+  const days = options?.days ?? 30;
+  const preferAttempted = options?.preferAttempted ?? false;
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+
   const { data, error } = await supabaseAdmin
     .from('orders')
     .select('id, order_number, email, total, payment_status, status, payment_method, metadata, created_at')
     .neq('payment_status', 'paid')
     .neq('status', 'cancelled')
+    .gte('created_at', since)
     .order('created_at', { ascending: false })
-    .limit(300);
+    .limit(400);
 
   if (error) throw new Error(error.message);
 
   const pending = ((data || []) as PendingMoolreOrder[]).filter((order) => {
     const method = order.payment_method || (order.metadata?.payment_method as string | undefined);
-    return method === 'moolre';
+    const hasMoolreRef = typeof order.metadata?.moolre_payment_ref === 'string';
+    return method === 'moolre' || hasMoolreRef;
   });
+
+  if (preferAttempted) {
+    pending.sort((a, b) => {
+      const aAttempt = typeof a.metadata?.moolre_payment_ref === 'string' ? 1 : 0;
+      const bAttempt = typeof b.metadata?.moolre_payment_ref === 'string' ? 1 : 0;
+      if (bAttempt !== aAttempt) return bAttempt - aAttempt;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }
 
   return pending.slice(0, capped);
 }
