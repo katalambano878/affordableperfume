@@ -150,6 +150,7 @@ export default function Footer() {
                 &copy;
               </Link>{' '}
               {new Date().getFullYear()} {siteName.toUpperCase()} — CRAFTED IN GHANA.
+              {' '}· Powered by <a href="https://doctorbarns.com" target="_blank" rel="noopener" className="hover:text-gray-400 hover:underline transition-colors">Doctor Barns Tech</a>
             </div>
 
             <div className="flex items-center gap-6">
