@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useCMS } from '@/context/CMSContext';
+import { SmsCreditDashboardCard } from '@/components/admin/SmsCreditDashboardCard';
 
 const PROFILE_TIMEOUT_MS = 12_000;
 
@@ -494,6 +495,7 @@ export default function AdminLayout({
           </div>
         </header>
 
+        <SmsCreditDashboardCard />
         <main className="p-4 lg:p-6">
           {children}
         </main>
