@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createStorageClient } from "@/lib/db/storage";
 import { isPlainPostgres } from "@/lib/db/mode";
 
+import { guardStorageWrite } from "@/lib/db/rest-guard";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -10,7 +12,7 @@ export const runtime = "nodejs";
  *   DELETE /storage/v1/object/{bucket}  body = { prefixes: string[] }
  * (this is what supabase-js .remove([paths]) actually sends)
  */
-export async function DELETE(
+async function deleteUnguarded(
   req: NextRequest,
   ctx: { params: Promise<{ bucket: string }> }
 ) {
@@ -32,3 +34,5 @@ export async function DELETE(
     prefixes.map((name) => ({ name, bucket_id: bucket }))
   );
 }
+
+export const DELETE = guardStorageWrite(deleteUnguarded);
